@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   AppState,
@@ -188,17 +188,47 @@ export const useVoiceRecorder = (
 
   const [isRecording, setIsRecording] = useState(false);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
-  // `secondsRemaining` only becomes meaningful once recording starts.
-  // Initialising it to `0` avoids the "35s shown before tap" UX wart.
-  const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [recording, setRecording] = useState<
     UseVoiceRecorderReturn['recording']
   >(null);
+
+  // `secondsRemaining` is *derived* from `secondsElapsed` so the tick only
+  // has to maintain ONE source of truth. Previously this was a separate
+  // useState that the tick had to keep in sync via setSecondsRemaining —
+  // and any missed/dropped setter call would freeze the visible countdown
+  // even while native recording continued. Deriving it removes that whole
+  // class of bug and also keeps the value at `0` until the user actually
+  // starts a take (no "35s shown before tap" wart).
+  const secondsRemaining = useMemo(() => {
+    if (!isRecording) return 0;
+    if (!maxDurationSec || maxDurationSec <= 0) return 0;
+    return Math.max(0, maxDurationSec - secondsElapsed);
+  }, [isRecording, maxDurationSec, secondsElapsed]);
 
   const amplitudeRef = useRef(new Animated.Value(BASELINE_AMPLITUDE));
   const ownerIdRef = useRef(`recorder-${Math.random().toString(36).slice(2)}`);
   const startedAtRef = useRef<number>(0);
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * Hard backup auto-stop timer. The per-second `tickIntervalRef` would
+   * normally trigger teardown at `maxDurationSec`, but `setInterval` is
+   * not reliable when the JS thread stalls (heavy render, slow native
+   * bridge, etc.) — and we'd rather under-record than let a forgotten
+   * mic burn through battery + storage. This one-shot `setTimeout`
+   * fires at the absolute deadline regardless of how many ticks were
+   * delivered, guaranteeing the recording cannot exceed `maxDurationSec`
+   * by more than scheduler jitter.
+   */
+  const hardStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  /**
+   * Holds the native-returned URI for the *in-flight* recording. We don't
+   * surface it as `recording` state until teardown validates the file —
+   * exposing it early would let the UI enable a "Submit" button while the
+   * mic is still capturing (and the file isn't finalized on disk).
+   */
+  const inFlightUriRef = useRef<string | null>(null);
 
   // Lifecycle flags. Used together to make start/stop safe against:
   //  - Stop being called while native `Sound.startRecorder` is still resolving
@@ -231,6 +261,10 @@ export const useVoiceRecorder = (
     if (tickIntervalRef.current) {
       clearInterval(tickIntervalRef.current);
       tickIntervalRef.current = null;
+    }
+    if (hardStopTimeoutRef.current) {
+      clearTimeout(hardStopTimeoutRef.current);
+      hardStopTimeoutRef.current = null;
     }
   }, []);
 
@@ -277,9 +311,19 @@ export const useVoiceRecorder = (
         }
       }
 
+      // Race `Sound.stopRecorder` against a generous timeout. We've seen
+      // the native promise hang indefinitely on some devices when the
+      // audio session is in an unexpected state (interrupted, route
+      // change). Hanging here would leave the UI stuck in 'recording'
+      // forever — better to fall back to the URI we cached at start.
       let uri: string | null = null;
       try {
-        const stoppedUri = await Sound.stopRecorder();
+        const stoppedUri = await Promise.race([
+          Sound.stopRecorder(),
+          new Promise<string | null>(resolve =>
+            setTimeout(() => resolve(null), 3000),
+          ),
+        ]);
         if (typeof stoppedUri === 'string' && stoppedUri.length > 0) {
           uri = stoppedUri;
         }
@@ -291,6 +335,14 @@ export const useVoiceRecorder = (
       } catch {
         // quiet fail
       }
+
+      // Fall back to the URI we captured at start time — some platforms
+      // return null from `stopRecorder` even though the file exists where
+      // `startRecorder` reported.
+      if (!uri && inFlightUriRef.current) {
+        uri = inFlightUriRef.current;
+      }
+      inFlightUriRef.current = null;
 
       soundCoordinator.release(ownerIdRef.current);
 
@@ -353,11 +405,13 @@ export const useVoiceRecorder = (
       return false;
     }
 
-    // Reset state for a fresh take.
+    // Reset state for a fresh take. `secondsRemaining` is derived from
+    // `secondsElapsed` + isRecording so we don't have to (and shouldn't)
+    // touch it here — it'll snap to `maxDurationSec` the moment
+    // setIsRecording(true) fires below.
     clearTick();
     setRecording(null);
     setSecondsElapsed(0);
-    setSecondsRemaining(maxDurationSecRef.current ?? 0);
     amplitudeRef.current.setValue(BASELINE_AMPLITUDE);
 
     soundCoordinator.acquire(ownerIdRef.current, 'recorder', () => {
@@ -397,6 +451,7 @@ export const useVoiceRecorder = (
         soundCoordinator.release(ownerIdRef.current);
         amplitudeRef.current.setValue(BASELINE_AMPLITUDE);
         setRecording(null);
+        inFlightUriRef.current = null;
         setIsRecording(false);
         stoppedRef.current = true;
         return false;
@@ -407,7 +462,11 @@ export const useVoiceRecorder = (
         // iOS the permission prompt can swallow several seconds; counting
         // those as "elapsed" would shorten the user's actual recording.
         startedAtRef.current = Date.now();
-        setRecording({ uri: toFileUri(uri), durationSec: 0 });
+        // Stash the URI in a ref instead of `recording` state — teardown
+        // will validate the file and promote it to public `recording`
+        // state. Surfacing it now would let the screen's Submit button
+        // enable before the user has actually finished speaking.
+        inFlightUriRef.current = toFileUri(uri);
       }
 
       // Now that native is live AND no stop has been queued, surface
@@ -418,21 +477,23 @@ export const useVoiceRecorder = (
         amplitudeRef.current.setValue(normalizeMetering(e.currentMetering));
       });
 
+      // Tick is intentionally minimal: it only advances `secondsElapsed`.
+      // `secondsRemaining` is *derived* in the hook body via useMemo, so
+      // there's no second piece of state that can fall out of sync.
       tickIntervalRef.current = setInterval(() => {
-        // Defensive: if something else (preempt, manual stop) torn us down,
-        // don't fire any more ticks.
         if (stoppedRef.current) {
           clearTick();
           return;
         }
-        const elapsed = Math.floor(
-          (Date.now() - startedAtRef.current) / 1000,
+        const elapsed = Math.max(
+          0,
+          Math.floor((Date.now() - startedAtRef.current) / 1000),
         );
         setSecondsElapsed(elapsed);
+
         const max = maxDurationSecRef.current;
         if (max && max > 0) {
           const remaining = Math.max(0, max - elapsed);
-          setSecondsRemaining(remaining);
           onTickRef.current?.(remaining);
           if (remaining <= 0) {
             clearTick();
@@ -443,6 +504,21 @@ export const useVoiceRecorder = (
           onTickRef.current?.(elapsed);
         }
       }, 1000);
+
+      // Hard backup auto-stop. If the JS thread stalls (heavy render or
+      // native bridge backpressure during the recording) the per-second
+      // tick can be delayed by many seconds — leaving the mic open well
+      // past `maxDurationSec`. This one-shot timer fires at the absolute
+      // deadline and tears down the recorder regardless of tick health.
+      const maxAtStart = maxDurationSecRef.current;
+      if (maxAtStart && maxAtStart > 0) {
+        hardStopTimeoutRef.current = setTimeout(() => {
+          if (stoppedRef.current) return;
+          // Reuse the same fire-and-forget teardown — onFinish/onError
+          // flow is identical to the tick's auto-stop path.
+          teardown(true).catch(() => {});
+        }, maxAtStart * 1000);
+      }
 
       return true;
     } catch (err) {
@@ -481,8 +557,8 @@ export const useVoiceRecorder = (
   const reset = useCallback(async () => {
     await teardown(false);
     setRecording(null);
+    inFlightUriRef.current = null;
     setSecondsElapsed(0);
-    setSecondsRemaining(0);
   }, [teardown]);
 
   // ── AppState handling ───────────────────────────────────────────────────

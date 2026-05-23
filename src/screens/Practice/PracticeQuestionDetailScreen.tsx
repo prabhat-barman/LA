@@ -242,6 +242,18 @@ const getAttemptUserName = (user: any): string => {
   return composed || u.name || u.user_name || 'Anonymous';
 };
 
+// Score-badge color thresholds:
+//   0           -> grey   (no attempt / no score yet)
+//   1..49       -> red    (poor)
+//   50..69      -> yellow (needs improvement)
+//   70+         -> green  (good)
+const getOverlayScoreColor = (val: number) => {
+  if (!val || val <= 0) return '#8E8E93';
+  if (val >= 70) return '#34C759';
+  if (val >= 50) return '#FFCC00';
+  return '#FF3B30';
+};
+
 export const PracticeQuestionDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<PracticeQuestionDetailRouteProp>();
@@ -909,22 +921,20 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     return 0;
   }, [scoreResult]);
 
-  // Breakdown values
-  const fluencyValue = scoreResult?.fluency_score ?? scoreResult?.fluency ?? 0;
-  const pronValue = scoreResult?.pronunciation_score ?? scoreResult?.pronunciation ?? 0;
-  const contentValue = scoreResult?.content_score ?? scoreResult?.content ?? 0;
-
-  // Score-badge color thresholds:
-  //   0           -> grey   (no attempt / no score yet)
-  //   1..49       -> red    (poor)
-  //   50..69      -> yellow (needs improvement)
-  //   70+         -> green  (good)
-  const getOverlayScoreColor = (val: number) => {
-    if (!val || val <= 0) return '#8E8E93';
-    if (val >= 70) return '#34C759';
-    if (val >= 50) return '#FFCC00';
-    return '#FF3B30';
-  };
+  // Breakdown values. The backend sometimes returns these as a plain
+  // number and sometimes as `{ score, out_of }` (newer shape) — pipe
+  // through `resolveSubscore` which handles both safely. Without this,
+  // rendering `{contentValue}%` for the object shape crashes React with
+  // "Objects are not valid as a React child".
+  const fluencyValue = resolveSubscore(
+    scoreResult?.fluency_score ?? scoreResult?.fluency,
+  );
+  const pronValue = resolveSubscore(
+    scoreResult?.pronunciation_score ?? scoreResult?.pronunciation,
+  );
+  const contentValue = resolveSubscore(
+    scoreResult?.content_score ?? scoreResult?.content,
+  );
 
   const sortedAttempts = useMemo(() => {
     const list = [...attempts];
@@ -1425,71 +1435,20 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               )}
             </View>
 
-            {/* Attempt Logs list */}
-            {activeHistoryTab === 'me' ? (
-              loadingAttempts ? (
-                <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: scale(20) }} />
-              ) : sortedAttempts.length > 0 ? (
-                sortedAttempts.map((attempt, index) => {
-                  // Prefer a flat numeric overall field if present, otherwise
-                  // derive from the score[] array (current backend shape).
-                  const flatOverall = attempt.score_percent ?? attempt.percentage ?? attempt.overall_score;
-                  const aScore = typeof flatOverall === 'number' && !isNaN(flatOverall)
-                    ? Math.round(flatOverall)
-                    : computeOverallPercent(attempt.score);
-                  const contentScore = getSubscoreByType(attempt.score, 0) || resolveSubscore(attempt.content);
-                  const fluencyScore = getSubscoreByType(attempt.score, 1) || resolveSubscore(attempt.fluency);
-                  const pronScore = getSubscoreByType(attempt.score, 2) || resolveSubscore(attempt.pronunciation);
-                  const aDate = formatAttemptDate(attempt.created_at ?? attempt.date);
-                  return (
-                    <View key={attempt.id ?? index} style={styles.attemptLogItem}>
-                      <View>
-                        <Text style={styles.attemptDate}>{aDate}</Text>
-                        <Text style={styles.attemptSubscores}>
-                          C: {contentScore} | F: {fluencyScore} | P: {pronScore}
-                        </Text>
-                      </View>
-                      <View style={[styles.attemptScoreBadge, { backgroundColor: getOverlayScoreColor(aScore) }]}>
-                        <Text style={styles.attemptScoreBadgeText}>{aScore}%</Text>
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <Text style={styles.noAttemptsText}>No previous attempts recorded.</Text>
-              )
+            {/* Attempt Logs list — items are memoized above so a recorder
+                tick (which re-renders the whole screen every second) does
+                NOT pay the cost of diffing 100+ attempt rows. */}
+            {loadingAttempts ? (
+              <ActivityIndicator
+                size="small"
+                color="#007AFF"
+                style={{ marginVertical: scale(20) }}
+              />
             ) : (
-              /* Others attempts */
-              loadingAttempts ? (
-                <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: scale(20) }} />
-              ) : sortedOthersAttempts.length > 0 ? (
-                sortedOthersAttempts.map((attempt, index) => {
-                  const flatOverall = attempt.score_percent ?? attempt.percentage ?? attempt.overall_score;
-                  const aScore = typeof flatOverall === 'number' && !isNaN(flatOverall)
-                    ? Math.round(flatOverall)
-                    : computeOverallPercent(attempt.score);
-                  const contentScore = getSubscoreByType(attempt.score, 0) || resolveSubscore(attempt.content);
-                  const fluencyScore = getSubscoreByType(attempt.score, 1) || resolveSubscore(attempt.fluency);
-                  const pronScore = getSubscoreByType(attempt.score, 2) || resolveSubscore(attempt.pronunciation);
-                  const aDate = formatAttemptDate(attempt.created_at ?? attempt.date);
-                  const attemptName = getAttemptUserName(attempt.user);
-                  return (
-                    <View key={attempt.id ?? index} style={styles.attemptLogItem}>
-                      <View style={{ flex: 1, paddingRight: scale(8) }}>
-                        <Text style={styles.attemptDate}>{attemptName} — {aDate}</Text>
-                        <Text style={styles.attemptSubscores}>
-                          C: {contentScore} | F: {fluencyScore} | P: {pronScore}
-                        </Text>
-                      </View>
-                      <View style={[styles.attemptScoreBadge, { backgroundColor: getOverlayScoreColor(aScore) }]}>
-                        <Text style={styles.attemptScoreBadgeText}>{aScore}%</Text>
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <Text style={styles.noAttemptsText}>No attempts from other students.</Text>
-              )
+              <MemoizedAttemptsList
+                attempts={activeHistoryTab === 'me' ? sortedAttempts : sortedOthersAttempts}
+                isOthers={activeHistoryTab === 'others'}
+              />
             )}
           </View>
         </ScrollView>
@@ -1607,11 +1566,25 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               <View style={styles.wordHighlightCard}>
                 <Text style={styles.wordHighlightHeader}>AI Transcription & Highlights</Text>
                 <View style={styles.wordsListWrap}>
-                  {wordsListToShow.map((w, idx) => (
-                    <Text key={idx} style={[styles.wordText, { color: getWordColor(w) }]}>
-                      {w.word || w}
-                    </Text>
-                  ))}
+                  {wordsListToShow.map((w, idx) => {
+                    // `w` can be a plain string OR an object like
+                    // `{ word, score, ... }`. Falling back to `w` itself
+                    // would render an object → React crash.
+                    const wordText =
+                      typeof w === 'string'
+                        ? w
+                        : typeof w?.word === 'string'
+                          ? w.word
+                          : String(w?.word ?? '');
+                    return (
+                      <Text
+                        key={idx}
+                        style={[styles.wordText, { color: getWordColor(w) }]}
+                      >
+                        {wordText}
+                      </Text>
+                    );
+                  })}
                 </View>
                 <View style={styles.colorGuideRow}>
                   <View style={styles.guideItem}>
@@ -1649,6 +1622,94 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     </View>
   );
 };
+
+// ── Memoized Attempts List Components ──
+interface MemoizedAttemptsListProps {
+  attempts: any[];
+  isOthers?: boolean;
+}
+
+const AttemptItem = React.memo(({ attempt, isOthers }: { attempt: any; isOthers?: boolean }) => {
+  const flatOverall =
+    attempt.score_percent ?? attempt.percentage ?? attempt.overall_score;
+  const aScore =
+    typeof flatOverall === 'number' && !isNaN(flatOverall)
+      ? Math.round(flatOverall)
+      : computeOverallPercent(attempt.score);
+  const contentScore =
+    getSubscoreByType(attempt.score, 0) || resolveSubscore(attempt.content);
+  const fluencyScore =
+    getSubscoreByType(attempt.score, 1) || resolveSubscore(attempt.fluency);
+  const pronScore =
+    getSubscoreByType(attempt.score, 2) ||
+    resolveSubscore(attempt.pronunciation);
+  const aDate = formatAttemptDate(attempt.created_at ?? attempt.date);
+
+  if (isOthers) {
+    const attemptName = getAttemptUserName(attempt.user);
+    return (
+      <View style={styles.attemptLogItem}>
+        <View style={{ flex: 1, paddingRight: scale(8) }}>
+          <Text style={styles.attemptDate}>
+            {attemptName} — {aDate}
+          </Text>
+          <Text style={styles.attemptSubscores}>
+            C: {contentScore} | F: {fluencyScore} | P: {pronScore}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.attemptScoreBadge,
+            { backgroundColor: getOverlayScoreColor(aScore) },
+          ]}
+        >
+          <Text style={styles.attemptScoreBadgeText}>{aScore}%</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.attemptLogItem}>
+      <View>
+        <Text style={styles.attemptDate}>{aDate}</Text>
+        <Text style={styles.attemptSubscores}>
+          C: {contentScore} | F: {fluencyScore} | P: {pronScore}
+        </Text>
+      </View>
+      <View
+        style={[
+          styles.attemptScoreBadge,
+          { backgroundColor: getOverlayScoreColor(aScore) },
+        ]}
+      >
+        <Text style={styles.attemptScoreBadgeText}>{aScore}%</Text>
+      </View>
+    </View>
+  );
+});
+
+const MemoizedAttemptsList = React.memo(({ attempts, isOthers }: MemoizedAttemptsListProps) => {
+  if (attempts.length === 0) {
+    return (
+      <Text style={styles.noAttemptsText}>
+        {isOthers ? 'No attempts from other students.' : 'No previous attempts recorded.'}
+      </Text>
+    );
+  }
+
+  return (
+    <>
+      {attempts.map((attempt, index) => (
+        <AttemptItem
+          key={attempt.id ?? index}
+          attempt={attempt}
+          isOthers={isOthers}
+        />
+      ))}
+    </>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

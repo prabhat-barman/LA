@@ -419,11 +419,18 @@ export const useQuestionMediaFlow = (
     setSecondsLeft(0);
   }, [clearCountdown, player, recorder]);
 
+  // Destructure the stable setter rather than depending on the whole
+  // `player` object (which is recreated every render). Without this,
+  // `setPlaybackRate` changes identity each render and any consumer
+  // useEffect that lists it as a dep fires every render — death by a
+  // thousand re-renders during an active recording, where the recorder's
+  // tick re-renders the orchestrator every second.
+  const { setRate: playerSetRate } = player;
   const setPlaybackRate = useCallback(
     async (rate: number) => {
-      await player.setRate(rate);
+      await playerSetRate(rate);
     },
-    [player],
+    [playerSetRate],
   );
 
   // Keep `recordedRef` in lock-step with the recorder's captured recording
@@ -446,7 +453,18 @@ export const useQuestionMediaFlow = (
 
   return {
     phase,
-    secondsLeft: phase === 'recording' ? recorder.secondsRemaining : secondsLeft,
+    // During the brief window between `setPhase('recording')` and native
+    // `Sound.startRecorder` resolving, the recorder hasn't flipped
+    // `isRecording=true` yet — its derived `secondsRemaining` is still 0.
+    // We fall back to the orchestrator's `secondsLeft` (set to
+    // `metadata.recordingDuration` inside `startRecording`) so the user
+    // never sees a "0s" flash before the countdown starts ticking down.
+    secondsLeft:
+      phase === 'recording'
+        ? recorder.isRecording
+          ? recorder.secondsRemaining
+          : secondsLeft
+        : secondsLeft,
     audioPositionMs: player.positionMs,
     audioDurationMs: player.durationMs,
     audioProgress: player.progress,

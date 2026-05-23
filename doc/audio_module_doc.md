@@ -130,6 +130,7 @@ interface UseAudioPlayerOptions {
   onComplete?: () => void;       // natural end of playback
   onPreempt?: () => void;        // displaced by another consumer
   onError?: (err: unknown) => void;
+  initialRate?: number;          // 0.5..2.0, default 1.0
 }
 ```
 
@@ -141,8 +142,10 @@ interface UseAudioPlayerReturn {
   positionMs: number;
   durationMs: number;
   progress: number;              // [0..1]
-  play: (uri: string) => Promise<boolean>;
+  rate: number;                  // current playback rate
+  play: (uri: string, rate?: number) => Promise<boolean>;
   stop: () => Promise<void>;
+  setRate: (rate: number) => Promise<void>;
 }
 ```
 
@@ -150,13 +153,23 @@ interface UseAudioPlayerReturn {
 
 ```tsx
 const player = useAudioPlayer({
+  initialRate: 1.0,
   onComplete: () => console.log('done'),
 });
 
 await player.play('https://cdn.example.com/audio.mp3');
+// Change speed mid-playback
+await player.setRate(1.5);
 // later
 await player.stop();
 ```
+
+### Playback rate
+
+Backed by `Sound.setPlaybackSpeed()` from `react-native-nitro-sound`. The
+hook clamps to `[0.5, 2.0]` (AVAudioPlayer-safe range). The rate is
+applied AFTER `startPlayer` resolves because most platforms reject a rate
+change on a not-yet-started player.
 
 ---
 
@@ -182,9 +195,27 @@ interface UseVoiceRecorderOptions {
   maxDurationSec?: number;
   onFinish?: (uri: string | null, elapsedSec: number) => void;
   onTick?: (remainingSec: number) => void;
-  onError?: (err: unknown, code: 'permission' | 'start' | 'stop') => void;
+  onError?: (
+    err: unknown,
+    code: 'permission' | 'start' | 'stop' | 'interrupted' | 'empty',
+  ) => void;
+  /**
+   * Auto-stop the recording when the app moves to background. Default `true`.
+   * Disable only if you have configured a background-capable audio session.
+   */
+  stopOnBackground?: boolean;
 }
 ```
+
+### Error codes
+
+| Code | When it fires |
+|---|---|
+| `permission` | Android `RECORD_AUDIO` denied (iOS uses native prompt + `start` failure) |
+| `start` | `Sound.startRecorder()` rejected (mic busy, hardware error) |
+| `stop` | `Sound.stopRecorder()` rejected (rare, usually safe to ignore) |
+| `interrupted` | App moved to background / inactive while recording. `onFinish` also fires with `(null, 0)`. |
+| `empty` | Native returned a URI but the file is empty / unreadable. `onFinish` also fires with `(null, elapsedSec)`. |
 
 ### Return value
 
@@ -263,6 +294,7 @@ interface UseQuestionMediaFlowConfig {
   isCore?: boolean;                      // flips prep time to PTE Core variant
   audioUrl?: string;                     // required when metadata.hasAudio
   autoStart?: boolean;                   // default true
+  initialPlaybackRate?: number;          // 0.5..2.0, default 1.0
   onAudioFinish?: () => void;
   onRecordingFinish?: (uri: string | null, durationSec: number) => void;
   onError?: (message: string) => void;
@@ -280,6 +312,7 @@ interface UseQuestionMediaFlowConfig {
   audioPositionMs: number;
   audioDurationMs: number;
   audioProgress: number;
+  playbackRate: number;                  // current rate (mirrors setPlaybackRate)
 
   // Captured recording (available from `review` onwards)
   recordedUri: string | null;
@@ -289,13 +322,26 @@ interface UseQuestionMediaFlowConfig {
 
   // Actions
   start: () => void;
+  replayAudio: () => Promise<void>;      // re-play question audio without recording
   skipAudio: () => Promise<void>;
   startRecordingNow: () => Promise<void>;
   stopRecording: () => Promise<void>;
   retake: () => void;
   reset: () => Promise<void>;
+  setPlaybackRate: (rate: number) => Promise<void>;  // 0.5..2.0
 }
 ```
+
+### `replayAudio` vs `start`
+
+`start()` is the full state-machine entry — it tears down any captured
+recording and walks the full audio → prep → recording → review flow.
+
+`replayAudio()` is for the "Play Audio" button in a `review` /
+`audio_done` state — plays the question audio again *without* clobbering
+the user's captured recording. Always prefer `replayAudio` for replay
+UIs; reserve `start()` for the initial entry and for explicit "restart
+this question" actions.
 
 ### Notes on edge cases
 
@@ -452,6 +498,52 @@ useEffect(() => () => { flow.reset(); }, []);
 
 ## 14. Future work (`feature/audio-module` TODO)
 
+Recently fixed in this branch:
+
+- [x] **Playback rate selector** — `useAudioPlayer.setRate()` + threaded
+      through `useQuestionMediaFlow.setPlaybackRate()`.
+- [x] **`replayAudio()`** dedicated action so the "Play Audio" button no
+      longer clobbers a captured recording.
+- [x] **iOS permission flicker** — `setIsRecording(true)` now happens
+      *after* `Sound.startRecorder` resolves, so the UI doesn't flash
+      "Recording…" while the iOS mic prompt is on screen.
+- [x] **AppState backgrounding** triggers a graceful stop with a new
+      `'interrupted'` error code (replaces the silent "phantom recording"
+      bug where users came back from backgrounded app with an empty file).
+- [x] **Empty-file validation** — every captured URI is checked for
+      non-zero size before being reported to the consumer. Empty files
+      surface as `onError(..., 'empty')` + `onFinish(null, _)`.
+- [x] **Android amplitude normalization** — formula now copes with both
+      iOS (-60..0 dB) and Android (-160..0 dB) ranges plus the legacy
+      linear 0..1 reporting some Android devices use.
+- [x] **`secondsRemaining` initial value** — starts at `0` instead of
+      `maxDurationSec` so the UI doesn't show a misleading countdown
+      before recording begins.
+- [x] **soundCoordinator dev warnings + `__resetForTests`** added.
+- [x] **`useFocusEffect` cleanup** on `PracticeQuestionDetailScreen` so
+      audio stops when navigating away.
+- [x] **`replayAudio` no longer clobbers the captured recording** —
+      previously `await recorder.reset()` inside `replayAudio` cleared
+      the user's answer the moment they tapped Play Audio in review.
+- [x] **No more "audio replay → infinite prep loop"** — `onComplete` /
+      `onPreempt` / `onError` paths now route through `settleAfterAudio()`
+      which checks `recordedRef.current` and lands back in `review` if a
+      recording already exists, instead of unconditionally restarting the
+      prep countdown.
+- [x] **Android file URI normalization** — `fetch(uri)` in
+      `isRecordingNonEmpty` now goes through `toFileUri()` which adds
+      the missing `file:///` prefix for Android's bare absolute paths.
+      Was causing every Android recording to surface as `'empty'`.
+- [x] **Playback progress bar finishes at 100%** — the
+      `addPlaybackEndListener` now snaps `positionMs` to `e.duration`
+      so the bar fills completely instead of getting stuck at ~98%.
+- [x] **Mic permission denied → Settings shortcut** —
+      `PracticeQuestionDetailScreen.handleMediaError` shows an Alert
+      with an "Open Settings" CTA when the error message indicates a
+      permission issue.
+
+Still outstanding:
+
 - [ ] Background-audio session config on iOS (route audio through speaker
       even on silent mode for question audio)
 - [ ] Bluetooth headset routing test pass
@@ -460,3 +552,12 @@ useEffect(() => () => { flow.reset(); }, []);
       sections
 - [ ] Unit tests for `soundCoordinator` preemption matrix
 - [ ] Storybook entries for every `practiceMedia/*` component
+- [ ] **Full audio session interruption handling** (mid-call resume,
+      Siri/AirPods bursts) — requires a small native bridge module that
+      forwards `AVAudioSessionInterruptionNotification` and Android
+      `AudioManager.OnAudioFocusChangeListener` events into JS. AppState
+      handling covers the dominant "app backgrounded" case.
+- [ ] **Recording GC** — stale files in cache dir (`~/Library/Caches/`
+      on iOS, `getCacheDir()` on Android) are pruned by the OS under
+      storage pressure, but a session-list + age-based prune on app
+      launch would be more polite to power users.

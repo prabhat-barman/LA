@@ -236,17 +236,41 @@ export const MicrophoneSetupScreen: React.FC = () => {
   // ── Recorder + Playback (shared hooks) ────────────────────────────────────
   const recorder = useVoiceRecorder({
     maxDurationSec: MIC_TEST_DURATION_SEC,
-    onFinish: (_uri, _elapsed) => {
+    onFinish: (uri, _elapsed) => {
+      // Treat "no uri" as a failed test — happens when recording is empty
+      // or interrupted before any audio was captured.
+      if (!uri) {
+        setStep('failed');
+        setMeterAmplitude(0.15);
+        return;
+      }
       setTestCompleted(true);
       setStep('complete');
       setMeterAmplitude(0.15);
     },
     onError: (_err, code) => {
-      if (code === 'permission') {
-        setStep('failed');
-        showToast('Microphone permission denied.', 'error');
-      } else {
-        showToast('Failed to start recording.', 'error');
+      switch (code) {
+        case 'permission':
+          setStep('failed');
+          showToast('Microphone permission denied.', 'error');
+          break;
+        case 'interrupted':
+          showToast(
+            'Mic test was interrupted — please stay on this screen.',
+            'error',
+          );
+          break;
+        case 'empty':
+          showToast(
+            "We couldn't capture any audio. Check your mic and retry.",
+            'error',
+          );
+          break;
+        case 'start':
+          showToast('Failed to start recording.', 'error');
+          break;
+        default:
+          break;
       }
     },
   });

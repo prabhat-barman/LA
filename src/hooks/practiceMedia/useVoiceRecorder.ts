@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, PermissionsAndroid, Platform } from 'react-native';
+import {
+  Animated,
+  AppState,
+  AppStateStatus,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
 import Sound, { RecordBackType } from 'react-native-nitro-sound';
 import { soundCoordinator } from './soundCoordinator';
+
+export type VoiceRecorderErrorCode =
+  | 'permission'
+  | 'start'
+  | 'stop'
+  /** Recording was cut short because the app moved to background. */
+  | 'interrupted'
+  /** Native returned a URI but the resulting file is empty / unreadable. */
+  | 'empty';
 
 export interface UseVoiceRecorderOptions {
   /**
@@ -14,6 +29,9 @@ export interface UseVoiceRecorderOptions {
    * Fires whenever the recording ends (auto-stop OR `stop()` call OR preempted
    * by another consumer). Receives the recorded file URI (if any) and the
    * actual elapsed seconds measured wall-clock from `start()`.
+   *
+   * `uri` is `null` if no audio was captured OR if the captured file was
+   * empty (in which case `onError(..., 'empty')` also fires).
    */
   onFinish?: (uri: string | null, elapsedSec: number) => void;
 
@@ -24,9 +42,17 @@ export interface UseVoiceRecorderOptions {
   onTick?: (remainingSec: number) => void;
 
   /**
-   * Permission-denied / start failure handler. The hook never throws.
+   * Permission-denied / start failure / interrupted / empty-file handler.
+   * The hook never throws.
    */
-  onError?: (err: unknown, code: 'permission' | 'start' | 'stop') => void;
+  onError?: (err: unknown, code: VoiceRecorderErrorCode) => void;
+
+  /**
+   * Auto-stop the recording when the app moves to background. Defaults to
+   * `true`. Disable only if your app declares `UIBackgroundModes: audio`
+   * and configures a background-capable audio session.
+   */
+  stopOnBackground?: boolean;
 }
 
 export interface UseVoiceRecorderReturn {
@@ -53,6 +79,38 @@ export interface UseVoiceRecorderReturn {
 }
 
 const BASELINE_AMPLITUDE = 0.15;
+// Floor used when normalizing metering dB to a 0..1 waveform value. -80dB
+// gives a more usable dynamic range for voice than the AVAudioRecorder
+// hardware floor of -160dB (which would compress quiet speech into a
+// near-flat line).
+const METERING_FLOOR_DB = -80;
+
+/**
+ * Normalize a native metering reading to a 0..1 amplitude.
+ *
+ * Both iOS (`AVAudioRecorder.peakPower`) and Android (nitro-sound's
+ * `20 * log10(maxAmplitude / 32767)`) emit dB values in the [-160, 0]
+ * range. We clamp to a more useful [-80, 0] window for voice and lift the
+ * floor to `BASELINE_AMPLITUDE` so the waveform never visually flatlines.
+ *
+ * Some Android devices have been observed emitting positive linear values
+ * (legacy behaviour) — those are also handled correctly via the same
+ * clamp/min path.
+ */
+const normalizeMetering = (raw: number | undefined): number => {
+  if (raw === undefined || isNaN(raw)) return BASELINE_AMPLITUDE;
+
+  // Handle linear 0..1 (legacy) or already-normalized values.
+  if (raw >= 0 && raw <= 1) {
+    return Math.max(BASELINE_AMPLITUDE, Math.min(1, raw));
+  }
+
+  // dB path (negative values, both platforms).
+  const db = raw > 0 ? -60 : raw;
+  const clamped = Math.max(METERING_FLOOR_DB, Math.min(0, db));
+  const norm = (clamped - METERING_FLOOR_DB) / -METERING_FLOOR_DB;
+  return Math.max(BASELINE_AMPLITUDE, Math.min(1, norm));
+};
 
 const requestAndroidPermission = async (): Promise<boolean> => {
   if (Platform.OS !== 'android') return true;
@@ -74,16 +132,65 @@ const requestAndroidPermission = async (): Promise<boolean> => {
   return result === PermissionsAndroid.RESULTS.GRANTED;
 };
 
+/**
+ * Normalize a recorder-returned path to a `file://`-prefixed URI that
+ * `fetch` can read on both platforms.
+ *
+ * - iOS:     nitro-sound already returns a full `file:///...` URL.
+ * - Android: returns a bare absolute path like
+ *            `/data/user/0/com.la/cache/sound.mp4`. `fetch` (and
+ *            `FormData` file uploads) need the `file:///` prefix or they
+ *            silently fail.
+ */
+const toFileUri = (raw: string): string => {
+  if (!raw) return raw;
+  if (raw.startsWith('file://')) return raw;
+  if (raw.startsWith('content://')) return raw; // Android scoped storage
+  // Strip leading slashes and re-prefix — keeps the URL well-formed
+  // regardless of how many slashes the native side returned.
+  const cleaned = raw.replace(/^\/+/, '');
+  return `file:///${cleaned}`;
+};
+
+/**
+ * Best-effort check whether a recorder-returned URI resolves to a
+ * non-empty file. Used to catch the silent failure where some Android
+ * devices return a URI from `stopRecorder` but never wrote any audio
+ * data to it.
+ */
+const isRecordingNonEmpty = async (uri: string): Promise<boolean> => {
+  if (!uri) return false;
+  const fetchable = toFileUri(uri);
+  try {
+    // RN's fetch supports file:// reads on both platforms; HEAD isn't
+    // universally supported for file URIs so we issue a GET and inspect
+    // the resulting blob size. This is cheap for the tiny files involved
+    // (a 40-second m4a is ~200KB).
+    const res = await fetch(fetchable);
+    const blob = await res.blob();
+    return blob.size > 256; // 256B = any plausible container header
+  } catch {
+    // If we can't read the file at all assume it's bad.
+    return false;
+  }
+};
+
 export const useVoiceRecorder = (
   options: UseVoiceRecorderOptions = {},
 ): UseVoiceRecorderReturn => {
-  const { maxDurationSec, onFinish, onTick, onError } = options;
+  const {
+    maxDurationSec,
+    onFinish,
+    onTick,
+    onError,
+    stopOnBackground = true,
+  } = options;
 
   const [isRecording, setIsRecording] = useState(false);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
-  const [secondsRemaining, setSecondsRemaining] = useState(
-    maxDurationSec ?? 0,
-  );
+  // `secondsRemaining` only becomes meaningful once recording starts.
+  // Initialising it to `0` avoids the "35s shown before tap" UX wart.
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
   const [recording, setRecording] = useState<
     UseVoiceRecorderReturn['recording']
   >(null);
@@ -112,11 +219,13 @@ export const useVoiceRecorder = (
   const onFinishRef = useRef(onFinish);
   const onTickRef = useRef(onTick);
   const onErrorRef = useRef(onError);
+  const maxDurationSecRef = useRef(maxDurationSec);
   useEffect(() => {
     onFinishRef.current = onFinish;
     onTickRef.current = onTick;
     onErrorRef.current = onError;
-  }, [onFinish, onTick, onError]);
+    maxDurationSecRef.current = maxDurationSec;
+  }, [onFinish, onTick, onError, maxDurationSec]);
 
   const clearTick = useCallback(() => {
     if (tickIntervalRef.current) {
@@ -126,7 +235,7 @@ export const useVoiceRecorder = (
   }, []);
 
   const teardown = useCallback(
-    async (emitFinish: boolean) => {
+    async (emitFinish: boolean, interruptReason?: VoiceRecorderErrorCode) => {
       // Mark the intent to stop synchronously — even if we have to await an
       // in-flight start below, post-start setup must see this flag and bail.
       stopRequestedRef.current = true;
@@ -143,11 +252,11 @@ export const useVoiceRecorder = (
 
       if (stoppedRef.current) {
         // The in-flight start aborted itself once it saw `stopRequestedRef`.
-        // No native handle to release; just emit the finish so the consumer
-        // can transition to its "review" state with whatever URI start() set.
+        // No native handle to release; emit finish with whatever was captured
+        // (typically nothing — see the bail branch in performStart which
+        // now clears `setRecording(null)` to prevent leaking a bogus URI).
         if (emitFinish) {
-          const captured = recording;
-          onFinishRef.current?.(captured?.uri ?? null, captured?.durationSec ?? 0);
+          onFinishRef.current?.(null, 0);
         }
         stopRequestedRef.current = false;
         return;
@@ -156,14 +265,15 @@ export const useVoiceRecorder = (
 
       clearTick();
 
+      const max = maxDurationSecRef.current;
       let elapsed = 0;
       if (startedAtRef.current > 0) {
         elapsed = Math.max(
           1,
           Math.round((Date.now() - startedAtRef.current) / 1000),
         );
-        if (maxDurationSec && maxDurationSec > 0) {
-          elapsed = Math.min(maxDurationSec, elapsed);
+        if (max && max > 0) {
+          elapsed = Math.min(max, elapsed);
         }
       }
 
@@ -187,23 +297,48 @@ export const useVoiceRecorder = (
       amplitudeRef.current.setValue(BASELINE_AMPLITUDE);
       setIsRecording(false);
 
-      if (emitFinish) {
-        const finalRecording = uri ? { uri, durationSec: elapsed } : null;
-        if (finalRecording) {
-          setRecording(finalRecording);
+      // Validate the file before reporting success. Some Android devices
+      // return a URI from stopRecorder even when no audio was written
+      // (e.g. permission revoked mid-recording, audio focus loss).
+      let finalUri: string | null = null;
+      if (uri) {
+        const normalized = toFileUri(uri);
+        const ok = await isRecordingNonEmpty(normalized);
+        if (ok) {
+          finalUri = normalized;
+          setRecording({ uri: normalized, durationSec: elapsed });
+        } else {
+          onErrorRef.current?.(
+            new Error(`Recording at ${normalized} is empty.`),
+            'empty',
+          );
+          setRecording(null);
         }
-        onFinishRef.current?.(uri, elapsed);
+      }
+
+      // If the teardown was triggered by an interruption (e.g. app
+      // backgrounded), surface that to the consumer too — it lets the UI
+      // show a friendlier message than a generic stop.
+      if (interruptReason) {
+        onErrorRef.current?.(
+          new Error('Recording was interrupted.'),
+          interruptReason,
+        );
+      }
+
+      if (emitFinish) {
+        onFinishRef.current?.(finalUri, elapsed);
       }
       stopRequestedRef.current = false;
     },
-    // `recording` is intentionally NOT a dep — we only read it as a fallback
-    // when start() was cancelled before any native URI could be captured.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clearTick, maxDurationSec],
+    [clearTick],
   );
 
   const performStart = useCallback(async (): Promise<boolean> => {
-    // Permission gate
+    // Permission gate (Android runtime). iOS triggers its prompt inside
+    // `Sound.startRecorder` itself — we keep `isRecording` false until
+    // native resolves, which avoids the "recording" UI flicker while the
+    // permission sheet is up.
     try {
       const ok = await requestAndroidPermission();
       if (!ok) {
@@ -222,7 +357,7 @@ export const useVoiceRecorder = (
     clearTick();
     setRecording(null);
     setSecondsElapsed(0);
-    setSecondsRemaining(maxDurationSec ?? 0);
+    setSecondsRemaining(maxDurationSecRef.current ?? 0);
     amplitudeRef.current.setValue(BASELINE_AMPLITUDE);
 
     soundCoordinator.acquire(ownerIdRef.current, 'recorder', () => {
@@ -234,21 +369,20 @@ export const useVoiceRecorder = (
       amplitudeRef.current.setValue(BASELINE_AMPLITUDE);
     });
 
-    // Mark active BEFORE awaiting native start so a stop() call between here
-    // and the await resolving can find a non-no-op recorder. The post-await
-    // block re-checks `stopRequestedRef` to bail cleanly if stop got in first.
+    // Internal "we hold the slot" flag flips BEFORE awaiting native so a
+    // concurrent stop() can find a non-no-op recorder. The UI-facing
+    // `isRecording` is intentionally deferred to AFTER the await so iOS
+    // doesn't flash "Recording..." while the permission prompt is on screen.
     stoppedRef.current = false;
-    setIsRecording(true);
     startedAtRef.current = Date.now();
 
     try {
       const uri = await Sound.startRecorder(undefined, undefined, true);
-      if (uri) {
-        setRecording({ uri, durationSec: 0 });
-      }
 
       // Stop was requested while native start was in flight — release the
       // native handle and bail out before we install listeners/ticks.
+      // IMPORTANT: clear `recording` state too, otherwise the consumer may
+      // see a bogus 0-second URI from a half-started session.
       if (stopRequestedRef.current) {
         try {
           await Sound.stopRecorder();
@@ -262,15 +396,26 @@ export const useVoiceRecorder = (
         }
         soundCoordinator.release(ownerIdRef.current);
         amplitudeRef.current.setValue(BASELINE_AMPLITUDE);
+        setRecording(null);
         setIsRecording(false);
         stoppedRef.current = true;
         return false;
       }
 
+      if (uri) {
+        // Reset the start clock to the moment native ACTUALLY started — on
+        // iOS the permission prompt can swallow several seconds; counting
+        // those as "elapsed" would shorten the user's actual recording.
+        startedAtRef.current = Date.now();
+        setRecording({ uri: toFileUri(uri), durationSec: 0 });
+      }
+
+      // Now that native is live AND no stop has been queued, surface
+      // "recording" to the UI.
+      setIsRecording(true);
+
       Sound.addRecordBackListener((e: RecordBackType) => {
-        const db = e.currentMetering ?? -60;
-        const norm = Math.max(0.05, Math.min(1.0, (db + 60) / 60));
-        amplitudeRef.current.setValue(norm);
+        amplitudeRef.current.setValue(normalizeMetering(e.currentMetering));
       });
 
       tickIntervalRef.current = setInterval(() => {
@@ -284,8 +429,9 @@ export const useVoiceRecorder = (
           (Date.now() - startedAtRef.current) / 1000,
         );
         setSecondsElapsed(elapsed);
-        if (maxDurationSec && maxDurationSec > 0) {
-          const remaining = Math.max(0, maxDurationSec - elapsed);
+        const max = maxDurationSecRef.current;
+        if (max && max > 0) {
+          const remaining = Math.max(0, max - elapsed);
           setSecondsRemaining(remaining);
           onTickRef.current?.(remaining);
           if (remaining <= 0) {
@@ -311,7 +457,7 @@ export const useVoiceRecorder = (
       onErrorRef.current?.(err, 'start');
       return false;
     }
-  }, [clearTick, maxDurationSec, teardown]);
+  }, [clearTick, teardown]);
 
   const start = useCallback(async (): Promise<boolean> => {
     // Deduplicate overlapping starts — second caller waits for the first.
@@ -336,8 +482,30 @@ export const useVoiceRecorder = (
     await teardown(false);
     setRecording(null);
     setSecondsElapsed(0);
-    setSecondsRemaining(maxDurationSec ?? 0);
-  }, [maxDurationSec, teardown]);
+    setSecondsRemaining(0);
+  }, [teardown]);
+
+  // ── AppState handling ───────────────────────────────────────────────────
+  // iOS / Android both stop a foreground-only audio session when the app
+  // moves to background. Without this listener the UI stays "recording"
+  // while the native session is dead, and the user submits an empty file.
+  useEffect(() => {
+    if (!stopOnBackground) return;
+    const subscription = AppState.addEventListener(
+      'change',
+      (next: AppStateStatus) => {
+        // 'inactive' fires for a system overlay (Control Center, incoming
+        // call sheet) where iOS often pauses the session. We treat both
+        // states as "interrupted" since we can't reliably resume.
+        if (next === 'background' || next === 'inactive') {
+          if (!stoppedRef.current) {
+            teardown(true, 'interrupted').catch(() => {});
+          }
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, [stopOnBackground, teardown]);
 
   // Cleanup on unmount. Capture the owner id at mount time — the ref value
   // itself is stable for the hook's lifetime but ESLint can't prove that.

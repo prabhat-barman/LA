@@ -10,8 +10,15 @@ import {
   Platform,
   Image,
   Modal,
+  Alert,
+  Linking,
 } from 'react-native';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  RouteProp,
+  useFocusEffect,
+} from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 import { colors } from '../../theme/colors';
@@ -389,26 +396,30 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }
   };
 
-  // Audio resolving helper
-  const resolveAudioUrl = (audio: string | undefined) => {
+  // Audio resolving helper — memoized so callers can pass it as a dep
+  // without retriggering effects on every render.
+  const resolveAudioUrl = useCallback((audio: string | undefined) => {
     if (!audio) return '';
     if (audio.startsWith('http://') || audio.startsWith('https://')) {
       return audio;
     }
     const cleaned = audio.startsWith('/') ? audio.substring(1) : audio;
     return `${Config.audioPath}${cleaned}`;
-  };
+  }, []);
 
   // Image resolving helper
-  const resolveImageUrl = (img: string | undefined) => {
-    if (!img) return '';
-    if (img.startsWith('http://') || img.startsWith('https://')) {
-      return img;
-    }
-    const cleaned = img.startsWith('/') ? img.substring(1) : img;
-    const basePath = isCore ? Config.pdfPteCorePath : Config.pdfPath;
-    return `${basePath}${cleaned}`;
-  };
+  const resolveImageUrl = useCallback(
+    (img: string | undefined) => {
+      if (!img) return '';
+      if (img.startsWith('http://') || img.startsWith('https://')) {
+        return img;
+      }
+      const cleaned = img.startsWith('/') ? img.substring(1) : img;
+      const basePath = isCore ? Config.pdfPteCorePath : Config.pdfPath;
+      return `${basePath}${cleaned}`;
+    },
+    [isCore],
+  );
 
   // Main question content texts
   const questionText = useMemo(() => {
@@ -432,8 +443,41 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       questionDetails.question_audio ??
       questionDetails.q_audio;
     return audioFile ? resolveAudioUrl(audioFile) : undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionDetails]);
+  }, [questionDetails, resolveAudioUrl]);
+
+  // ── Mic permission helper ──────────────────────────────────────────────
+  // Prompts the user with a Settings shortcut when the OS reports that mic
+  // access is permanently denied (Android "Don't ask again" / iOS denial).
+  // Falls back to a plain toast for transient errors.
+  const handleMediaError = useCallback(
+    (msg: string) => {
+      const looksLikePermissionDenial =
+        /permission/i.test(msg) || /microphone/i.test(msg);
+      if (looksLikePermissionDenial) {
+        Alert.alert(
+          'Microphone Access Needed',
+          'Language Academy needs microphone access to record your answers. Open Settings to grant permission.',
+          [
+            { text: 'Not Now', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                Linking.openSettings().catch(() => {
+                  showToast(
+                    'Could not open Settings. Please grant mic access manually.',
+                    'error',
+                  );
+                });
+              },
+            },
+          ],
+        );
+        return;
+      }
+      showToast(msg, 'error');
+    },
+    [showToast],
+  );
 
   // ── Practice media state machine ────────────────────────────────────────
   // Wraps the entire audio/recording lifecycle (pre-roll countdown → question
@@ -447,8 +491,19 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     // we'd briefly enter a "no audio URL" fallback state before the audio
     // arrives, then restart.
     autoStart: !!questionDetails,
-    onError: (msg) => showToast(msg, 'error'),
+    initialPlaybackRate: selectedSpeed,
+    onError: handleMediaError,
   });
+
+  // Push playback-rate changes into the orchestrator so they take effect
+  // mid-playback (the question audio is the only thing rate-adjustable —
+  // sample audio uses its own player which stays at 1x). Depending on
+  // `mediaFlow` directly would re-fire every render (new object each
+  // render) — pulling the specific setter out makes the effect cheap.
+  const { setPlaybackRate } = mediaFlow;
+  useEffect(() => {
+    setPlaybackRate(selectedSpeed).catch(() => {});
+  }, [selectedSpeed, setPlaybackRate]);
 
   // Dedicated sample-answer audio player. Shares the global Sound coordinator
   // with the media-flow hook, so starting playback here automatically pauses
@@ -613,6 +668,20 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     fetchQuestionDetail(currentQuestionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, currentQuestionId]);
+
+  // Tear down all audio when the user navigates away (pushes another screen
+  // on top, or backgrounds the tab). Without this, sample audio / question
+  // audio can keep playing in the background while the user is on a
+  // different screen.
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        mediaFlow.reset().catch(() => {});
+        samplePlayer.stop().catch(() => {});
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  );
 
   // ── Submit Answer & Parse Scores ────────────────────────────────────────
   const submitAnswer = async () => {
@@ -1111,7 +1180,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                 ) : (
                   <TouchableOpacity
                     style={styles.questionAudioPlayBtn}
-                    onPress={() => mediaFlow.start()}
+                    onPress={() => mediaFlow.replayAudio()}
                     disabled={!questionAudioUrl}
                   >
                     <PlayIcon size={scale(12)} color="#007AFF" />

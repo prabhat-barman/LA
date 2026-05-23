@@ -1,0 +1,48 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# OS-specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# iOS
+ios/build/
+ios/Pods/
+ios/.xcode.env.local
+ios/DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/
+
+# Android
+android/app/build
+android/build
+android/local.properties
+.gradle/
+.idea/
+*.iml
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Coverage / Jest
+coverage/
+
+# Backups and temporary files
+*copy.md
+* copy.md
+*~
+*.swp
+*.tmp
+

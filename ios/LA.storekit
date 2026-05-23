@@ -1,0 +1,149 @@
+{
+  "identifier" : "LA_STOREKIT",
+  "nonRenewingSubscriptions" : [ ],
+  "products" : [ ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA"
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "LA_GROUP",
+      "localizations" : [ ],
+      "name" : "LA Subscriptions",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "19.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "GOLD_1M",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Gold 1 Month Premium Access",
+              "displayName" : "Gold 1 Month Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.languageacademy.gold1monthplan",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Gold 1 Month Plan",
+          "subscriptionGroupID" : "LA_GROUP",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "34.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "GOLD_2M",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Gold 2 Months Premium Access",
+              "displayName" : "Gold 2 Months Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.languageacademy.gold2monthplan",
+          "recurringSubscriptionPeriod" : "P2M",
+          "referenceName" : "Gold 2 Months Plan",
+          "subscriptionGroupID" : "LA_GROUP",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "49.99",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "GOLD_3M",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Gold 3 Months Premium Access",
+              "displayName" : "Gold 3 Months Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.languageacademy.gold3monthplan",
+          "recurringSubscriptionPeriod" : "P3M",
+          "referenceName" : "Gold 3 Months Plan",
+          "subscriptionGroupID" : "LA_GROUP",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 4,
+          "internalID" : "SILVER_1M",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Silver 1 Month Standard Access",
+              "displayName" : "Silver 1 Month Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.languageacademy.silver1monthplann",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Silver 1 Month Plan",
+          "subscriptionGroupID" : "LA_GROUP",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "17.99",
+          "familyShareable" : false,
+          "groupNumber" : 5,
+          "internalID" : "SILVER_2M",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Silver 2 Months Standard Access",
+              "displayName" : "Silver 2 Months Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.languageacademy.silver2monthplan",
+          "recurringSubscriptionPeriod" : "P2M",
+          "referenceName" : "Silver 2 Months Plan",
+          "subscriptionGroupID" : "LA_GROUP",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [ ],
+          "codeOffers" : [ ],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 6,
+          "internalID" : "SILVER_3M",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Silver 3 Months Standard Access",
+              "displayName" : "Silver 3 Months Plan",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.languageacademy.silver3monthplan",
+          "recurringSubscriptionPeriod" : "P3M",
+          "referenceName" : "Silver 3 Months Plan",
+          "subscriptionGroupID" : "LA_GROUP",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

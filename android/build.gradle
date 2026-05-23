@@ -1,0 +1,27 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        // Firebase plugins — required by @react-native-firebase/crashlytics.
+        // These are no-ops until android/app/google-services.json is dropped in
+        // and the corresponding `apply plugin` lines in android/app/build.gradle
+        // are uncommented at the bottom of the file.
+        classpath("com.google.gms:google-services:4.4.2")
+        classpath("com.google.firebase:firebase-crashlytics-gradle:3.0.2")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"

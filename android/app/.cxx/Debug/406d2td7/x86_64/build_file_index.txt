@@ -1,4 +1,5 @@
 /Users/prabhatbarman/Desktop/LA/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt
+/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-community/netinfo/android/build/generated/source/codegen/jni/CMakeLists.txt
 /Users/prabhatbarman/Desktop/LA/node_modules/@react-native-google-signin/google-signin/android/build/generated/source/codegen/jni/CMakeLists.txt
 /Users/prabhatbarman/Desktop/LA/node_modules/react-native-bootsplash/android/build/generated/source/codegen/jni/CMakeLists.txt
 /Users/prabhatbarman/Desktop/LA/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt

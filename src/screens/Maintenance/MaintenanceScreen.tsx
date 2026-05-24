@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { WrenchInCircleIcon } from '../../components/atoms/Icon';
+import { logger } from '../../services/logger';
 
 const { width: screenWidth } = Dimensions.get('window');
 const scale = (size: number) => (screenWidth / 375) * size;
@@ -19,7 +20,7 @@ export const MaintenanceScreen: React.FC = () => {
 
   const handleSupportPress = () => {
     Linking.openURL('mailto:support@languageacademy.com.au').catch((err) =>
-      console.warn('Failed to open email link:', err)
+      logger.warn('Failed to open email link:', err)
     );
   };
 

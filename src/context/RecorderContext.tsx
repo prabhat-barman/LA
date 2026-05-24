@@ -3,6 +3,7 @@ import { Animated } from 'react-native';
 import { useAudioPlayer } from '../hooks/practiceMedia/useAudioPlayer';
 import { useVoiceRecorder } from '../hooks/practiceMedia/useVoiceRecorder';
 import type { QuestionMetadata } from '../config/practiceData';
+import { logger } from '../services/logger';
 
 export type MediaPhase =
   | 'idle'
@@ -84,7 +85,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         cb(secs);
       } catch (err) {
-        console.warn('Error in timer listener:', err);
+        logger.warn('Error in timer listener:', err);
       }
     });
   }, []);
@@ -124,6 +125,13 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, []);
 
+  // `startPrepCountdown` is defined further down — settleAfterAudio
+  // needs to call it without forming a cyclic useCallback dep chain.
+  // Stash the latest closure in a ref and dereference at call time;
+  // this keeps exhaustive-deps satisfied without invalidating the
+  // callback identity on every render.
+  const startPrepCountdownRef = useRef<(() => void) | null>(null);
+
   // Settle flow after playback completes or is skipped
   const settleAfterAudio = useCallback(() => {
     if (recordedUriRef.current) {
@@ -133,7 +141,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     const meta = metadataRef.current;
     if (meta && hasRecording(meta)) {
-      startPrepCountdown();
+      startPrepCountdownRef.current?.();
     } else {
       setPhase('audio_done');
       notifyTimerListeners(0);
@@ -154,7 +162,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     },
     onError: (err) => {
-      console.warn('Audio player error:', err);
+      logger.warn('Audio player error:', err);
       onAudioFinishRef.current?.();
       settleAfterAudio();
     },
@@ -176,7 +184,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       notifyTimerListeners(remainingSec);
     },
     onError: (err, code) => {
-      console.warn('Voice recorder error:', err, code);
+      logger.warn('Voice recorder error:', err, code);
       switch (code) {
         case 'permission':
           onErrorRef.current?.('Microphone permission is required to practice speaking.');
@@ -211,7 +219,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         cb(audioPositionMs, audioDurationMs, audioProgress);
       } catch (err) {
-        console.warn('Error in audio progress listener:', err);
+        logger.warn('Error in audio progress listener:', err);
       }
     });
   }, [audioPositionMs, audioDurationMs, audioProgress]);
@@ -268,6 +276,11 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }, 1000);
   }, [clearCountdown, startRecording, notifyTimerListeners]);
+
+  // Keep the forward-reference ref in sync so settleAfterAudio (defined
+  // earlier) can call the latest startPrepCountdown without listing it
+  // as a useCallback dependency.
+  startPrepCountdownRef.current = startPrepCountdown;
 
   const start = useCallback(() => {
     clearCountdown();

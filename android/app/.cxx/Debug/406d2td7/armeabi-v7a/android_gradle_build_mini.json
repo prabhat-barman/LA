@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-community/netinfo/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-google-signin/google-signin/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/prabhatbarman/Desktop/LA/node_modules/react-native-bootsplash/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/prabhatbarman/Desktop/LA/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
@@ -97,6 +98,11 @@
     },
     "react_codegen_RNBootSplashSpec::@05d5bd8b08339ce1ebaa": {
       "artifactName": "react_codegen_RNBootSplashSpec",
+      "abi": "armeabi-v7a",
+      "runtimeFiles": []
+    },
+    "react_codegen_RNCNetInfoSpec::@c36c96bfd5b5770618a5": {
+      "artifactName": "react_codegen_RNCNetInfoSpec",
       "abi": "armeabi-v7a",
       "runtimeFiles": []
     },

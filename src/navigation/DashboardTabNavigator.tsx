@@ -10,7 +10,7 @@ import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/b
 import { DashboardScreen } from '../screens/Dashboard/DashboardScreen';
 import { PracticeScreen } from '../screens/Practice/PracticeScreen';
 import { MockTestScreen } from '../screens/MockTest/MockTestScreen';
-import { VideosScreen } from '../screens/Videos/VideosScreen';
+import { VideosScreen } from '../screens/Videos/Videos';
 import { MenuScreen } from '../screens/Menu/MenuScreen';
 import {
   HomeIcon,
@@ -111,6 +111,10 @@ const AnimatedTabItem: React.FC<TabItemProps> = ({
       onLongPress={onLongPress}
       activeOpacity={0.8}
       style={styles.tabTouchable}
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: isFocused }}
+      accessibilityHint={`Switches to the ${label} tab`}
     >
       <Animated.View style={[styles.pill, { width: widthAnim, backgroundColor: pillBg }]}>
         {/* Icon — always white, dimmed when inactive */}

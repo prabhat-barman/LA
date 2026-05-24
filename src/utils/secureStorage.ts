@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../services/logger';
 
 const memoryStorage: Record<string, string> = {};
 
@@ -12,7 +13,7 @@ export const setItem = async (key: string, value: string): Promise<boolean> => {
     await AsyncStorage.setItem(key, value);
     return true;
   } catch (error) {
-    console.warn('AsyncStorage setItem failed:', error);
+    logger.warn('AsyncStorage setItem failed:', error);
     return true;
   }
 };
@@ -25,7 +26,7 @@ export const getItem = async (key: string): Promise<string | null> => {
       return val;
     }
   } catch (error) {
-    console.warn('AsyncStorage getItem failed:', error);
+    logger.warn('AsyncStorage getItem failed:', error);
   }
   return memoryStorage[key] || null;
 };
@@ -36,7 +37,7 @@ export const removeItem = async (key: string): Promise<boolean> => {
     await AsyncStorage.removeItem(key);
     return true;
   } catch (error) {
-    console.warn('AsyncStorage removeItem failed:', error);
+    logger.warn('AsyncStorage removeItem failed:', error);
     return true;
   }
 };
@@ -49,7 +50,7 @@ export const clear = async (): Promise<boolean> => {
     await AsyncStorage.clear();
     return true;
   } catch (error) {
-    console.warn('AsyncStorage clear failed:', error);
+    logger.warn('AsyncStorage clear failed:', error);
     return true;
   }
 };

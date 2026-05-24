@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-community/netinfo/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/prabhatbarman/Desktop/LA/node_modules/@react-native-google-signin/google-signin/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/prabhatbarman/Desktop/LA/node_modules/react-native-bootsplash/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/prabhatbarman/Desktop/LA/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
@@ -55,6 +56,11 @@
       "toolchain": "toolchain",
       "abi": "x86_64",
       "artifactName": "react_codegen_RNBootSplashSpec"
+    },
+    "react_codegen_RNCNetInfoSpec::@c36c96bfd5b5770618a5": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "react_codegen_RNCNetInfoSpec"
     },
     "react_codegen_RNCWebViewSpec::@eb48929f9f7453740a6c": {
       "toolchain": "toolchain",

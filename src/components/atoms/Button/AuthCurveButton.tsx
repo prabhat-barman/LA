@@ -18,12 +18,18 @@ interface AuthCurveButtonProps {
   title: string;
   onPress: () => void;
   activeOpacity?: number;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  disabled?: boolean;
 }
 
 const AuthCurveButton: React.FC<AuthCurveButtonProps> = ({
   title,
   onPress,
   activeOpacity = 0.8,
+  accessibilityLabel,
+  accessibilityHint,
+  disabled = false,
 }) => {
   const insets = useSafeAreaInsets();
   const dynamicBottom = scale(15) + (insets.bottom > 0 ? insets.bottom * 0.5 : 0);
@@ -33,6 +39,11 @@ const AuthCurveButton: React.FC<AuthCurveButtonProps> = ({
       style={styles.svgButtonContainer}
       onPress={onPress}
       activeOpacity={activeOpacity}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
     >
       <AuthCurveShape
         width={screenWidth}

@@ -18,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import apiClient from '../../services/apiClient';
+import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import { MockTestSkeleton } from '../../components/atoms/Skeleton';
 import { hasActiveSubscriptionFromData } from '../../utils/subscriptionMapping';
@@ -294,7 +295,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
         });
         // TODO: navigate to result detail screen once it exists
         showToast(`${action} loaded for ${item.title}`, 'info');
-        console.log(`[MockTest] ${action} result for ${item.id}:`, res.data);
+        logger.log(`[MockTest] ${action} result for ${item.id}:`, res.data);
       } else {
         showToast(`${action} for ${item.title}`, 'info');
       }

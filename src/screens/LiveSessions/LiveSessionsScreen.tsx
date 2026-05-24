@@ -24,6 +24,7 @@ import {
 } from '../../components/atoms/Icon';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../services/apiClient';
+import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -56,7 +57,7 @@ export const LiveSessionsScreen: React.FC = () => {
     if (showLoadingIndicator) setLoading(true);
     try {
       const res = await apiClient.get(API_ENDPOINTS.LIVE_SESSIONS);
-      console.log('Live sessions response:', JSON.stringify(res.data));
+      logger.log('Live sessions response:', JSON.stringify(res.data));
       
       const rawList = res.data?.data || res.data?.sessions || res.data?.classes || (Array.isArray(res.data) ? res.data : []);
       
@@ -102,7 +103,7 @@ export const LiveSessionsScreen: React.FC = () => {
         setSessions([]);
       }
     } catch (err: any) {
-      console.warn('Failed to fetch live sessions:', err);
+      logger.warn('Failed to fetch live sessions:', err);
       showToast(err?.message || 'Could not fetch live sessions.', 'error');
       
       // Load mock items for preview if network/endpoint fails (robust fallback)
@@ -177,7 +178,7 @@ export const LiveSessionsScreen: React.FC = () => {
         }
       })
       .catch((err) => {
-        console.warn('Error opening link:', err);
+        logger.warn('Error opening link:', err);
         showToast('Failed to open link.', 'error');
       });
   };

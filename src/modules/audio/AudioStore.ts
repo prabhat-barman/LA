@@ -6,6 +6,7 @@
  */
 
 import Sound from 'react-native-nitro-sound';
+import { logger } from '../../services/logger';
 
 export interface AudioState {
   id: string | null;
@@ -175,7 +176,7 @@ class AudioStore {
       });
 
     } catch (error) {
-      console.warn("AudioStore play failed:", error);
+      logger.warn("AudioStore play failed:", error);
       this.onError(id, error);
     } finally {
       this.isLocked = false;
@@ -188,7 +189,7 @@ class AudioStore {
       await Sound.pausePlayer();
       this.emit({ playing: false, loading: false });
     } catch (e) {
-      console.warn("AudioStore pause failed:", e);
+      logger.warn("AudioStore pause failed:", e);
     }
   }
 
@@ -198,7 +199,7 @@ class AudioStore {
       await Sound.resumePlayer();
       this.emit({ playing: true, loading: false });
     } catch (e) {
-      console.warn("AudioStore resume failed:", e);
+      logger.warn("AudioStore resume failed:", e);
     }
   }
 
@@ -211,13 +212,13 @@ class AudioStore {
       } catch (_) {}
       this.emit({ playing: false, loading: false, position: 0 });
     } catch (e) {
-      console.warn("AudioStore stop failed:", e);
+      logger.warn("AudioStore stop failed:", e);
     }
   }
 
   seekTo(seconds: number) {
     Sound.seekToPlayer(seconds * 1000).catch((e) => {
-      console.warn("AudioStore seekTo failed:", e);
+      logger.warn("AudioStore seekTo failed:", e);
     });
     this.currentPosition = seconds;
     this.emit({ position: seconds });

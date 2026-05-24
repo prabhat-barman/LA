@@ -16,6 +16,7 @@ import {
 import Sound from 'react-native-nitro-sound';
 import { images } from '../../assets/imageUrl';
 import { fonts } from '../../assets/font_color_&_family/font_color_and_family';
+import { logger } from '../../services/logger';
 
 export interface HeadsetCheckPlayerProps {
   id?: string;
@@ -94,7 +95,7 @@ export default function HeadsetCheckPlayer({
         } catch (_) {}
       });
     } catch (err) {
-      console.warn("HeadsetCheckPlayer listener setup failed:", err);
+      logger.warn("HeadsetCheckPlayer listener setup failed:", err);
     }
   }, [onPlayTimeChange, onPlayingStateChange]);
 
@@ -125,7 +126,7 @@ export default function HeadsetCheckPlayer({
           if (onPlayingStateChange) onPlayingStateChange(true);
         }
       } catch (err) {
-        console.warn("HeadsetCheckPlayer start playback failed:", err);
+        logger.warn("HeadsetCheckPlayer start playback failed:", err);
         if (isMounted.current) {
           setIsLoading(false);
           setIsPlaying(false);

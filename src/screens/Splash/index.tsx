@@ -10,6 +10,7 @@ import { colors } from '../../theme/colors';
 const { width } = Dimensions.get('window');
 
 import { getItem } from '../../utils/secureStorage';
+import { logger } from '../../services/logger';
 
 const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -27,7 +28,7 @@ const SplashScreen = () => {
           navigation.replace('Onboarding');
         }
       } catch (error) {
-        console.warn('Session verification failed:', error);
+        logger.warn('Session verification failed:', error);
         navigation.replace('Onboarding');
       }
     };

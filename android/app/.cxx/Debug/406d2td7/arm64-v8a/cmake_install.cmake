@@ -45,6 +45,7 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/Users/prabhatbarman/Desktop/LA/android/app/.cxx/Debug/406d2td7/arm64-v8a/AsyncStorageSpec_autolinked_build/cmake_install.cmake")
+  include("/Users/prabhatbarman/Desktop/LA/android/app/.cxx/Debug/406d2td7/arm64-v8a/RNCNetInfoSpec_autolinked_build/cmake_install.cmake")
   include("/Users/prabhatbarman/Desktop/LA/android/app/.cxx/Debug/406d2td7/arm64-v8a/RNGoogleSignInCGen_autolinked_build/cmake_install.cmake")
   include("/Users/prabhatbarman/Desktop/LA/android/app/.cxx/Debug/406d2td7/arm64-v8a/RNBootSplashSpec_autolinked_build/cmake_install.cmake")
   include("/Users/prabhatbarman/Desktop/LA/android/app/.cxx/Debug/406d2td7/arm64-v8a/RNImagePickerSpec_autolinked_build/cmake_install.cmake")

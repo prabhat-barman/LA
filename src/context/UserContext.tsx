@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { getItem, setItem } from '../utils/secureStorage';
 import apiClient from '../services/apiClient';
+import { logger } from '../services/logger';
 import { API_ENDPOINTS } from '../config/apiConfig';
 
 export interface User {
@@ -53,7 +54,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(normalizedData);
       }
     } catch (err) {
-      console.warn('Failed to load user from secure storage:', err);
+      logger.warn('Failed to load user from secure storage:', err);
     } finally {
       setLoading(false);
     }
@@ -75,7 +76,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await setItem('user_data', JSON.stringify(normalizedData));
       }
     } catch (err) {
-      console.warn('Failed to refresh user profile from API:', err);
+      logger.warn('Failed to refresh user profile from API:', err);
     }
   }, []);
 
@@ -137,22 +138,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             last_name: payload.last_name,
           });
         } catch (nameErr) {
-          console.warn('Silent update-name failed:', nameErr);
+          logger.warn('Silent update-name failed:', nameErr);
         }
       }
 
       // 5. Refresh from server to sync state
       await refreshUser();
     } catch (err: any) {
-      console.error('Failed to update user details:', err);
+      logger.error(err, 'Failed to update user details');
       if (err && err.response) {
-        console.error('API Error Response Data:', JSON.stringify(err.response.data, null, 2));
-        console.error('API Error Response Status:', err.response.status);
-        console.error('API Error Response Headers:', err.response.headers);
+        logger.warn('API Error response', {
+          data: err.response.data,
+          status: err.response.status,
+          headers: err.response.headers,
+        });
       }
       if (err && err.config) {
-        console.error('API Error Request Config URL:', err.config.url);
-        console.error('API Error Request Config Data:', err.config.data);
+        logger.warn('API Error request', {
+          url: err.config.url,
+          data: err.config.data,
+        });
       }
       // Revert from storage on failure
       await loadUser();
@@ -174,7 +179,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       await refreshUser();
     } catch (err: any) {
-      console.error('Failed to update exam date:', err);
+      logger.error(err, 'Failed to update exam date');
       if (previous) {
         setUser(previous);
         await setItem('user_data', JSON.stringify(previous));
@@ -191,6 +196,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     loadUser();
   }, [loadUser]);
+
+  // Propagate the user identifier to Crashlytics so crash reports are
+  // grouped per-user. No-op when Firebase is not yet linked. We use the
+  // numeric id when available and fall back to email so anonymized
+  // installs still group cleanly.
+  useEffect(() => {
+    if (!user) return;
+    const id = user.id != null ? String(user.id) : user.email ?? '';
+    if (id) logger.setUserId(id);
+  }, [user]);
 
   const contextValue = useMemo(() => ({
     user,

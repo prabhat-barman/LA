@@ -16,6 +16,7 @@ import { SubHeader } from '../../components/molecules/SubHeader';
 import { DoubleCheckIcon, EmptyBellIllustration } from '../../components/atoms/Icon';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../services/apiClient';
+import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 
 const formatRelativeTime = (timeStr: string) => {
@@ -67,7 +68,7 @@ export const NotificationsListScreen: React.FC = () => {
     if (showLoadingIndicator) setLoading(true);
     try {
       const res = await apiClient.get(API_ENDPOINTS.GET_NOTIFICATIONS);
-      console.log('Notifications API response data:', JSON.stringify(res.data));
+      logger.log('Notifications API response data:', JSON.stringify(res.data));
       const rawList = res.data?.notifications || res.data?.data || res.data || [];
       if (Array.isArray(rawList)) {
         const mappedList = rawList.map((item: any, index: number) => {
@@ -97,7 +98,7 @@ export const NotificationsListScreen: React.FC = () => {
         setNotifications(mappedList);
       }
     } catch (err) {
-      console.warn('Failed to fetch notifications:', err);
+      logger.warn('Failed to fetch notifications:', err);
       showToast('Could not load notifications.', 'error');
     } finally {
       setLoading(false);
@@ -115,7 +116,7 @@ export const NotificationsListScreen: React.FC = () => {
       setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })));
       showToast('All notifications marked as read.', 'success');
     } catch (err) {
-      console.warn('Failed to mark notifications as read:', err);
+      logger.warn('Failed to mark notifications as read:', err);
       setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })));
       showToast('All notifications marked as read.', 'success');
     }
@@ -132,7 +133,7 @@ export const NotificationsListScreen: React.FC = () => {
     try {
       await apiClient.post(API_ENDPOINTS.MARK_AS_READ, { notification_id: id });
     } catch (err) {
-      console.warn('Failed to mark notification as read:', err);
+      logger.warn('Failed to mark notification as read:', err);
     }
   };
 

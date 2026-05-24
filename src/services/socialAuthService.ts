@@ -4,6 +4,7 @@ import { appleAuth } from "@invertase/react-native-apple-authentication";
 import Config from "../config/Config";
 import { API_ENDPOINTS } from "../config/apiConfig";
 import apiClient from "./apiClient";
+import { logger } from "./logger";
 import { setItem } from "../utils/secureStorage";
 
 // Initialize Google Sign-in config
@@ -16,7 +17,7 @@ export const configureGoogleSignIn = () => {
       iosClientId: Config.GOOGLE_IOS_CLIENT_ID,
     });
   } catch (error) {
-    console.error("Failed to configure Google Sign-In:", error);
+    logger.error(error, "Failed to configure Google Sign-In");
   }
 };
 
@@ -146,7 +147,7 @@ export const signInWithApple = async (): Promise<{ success: boolean; user?: any;
             last_name: lastName,
           });
         } catch (nameError) {
-          console.warn("Silent profile name update failed:", nameError);
+          logger.warn("Silent profile name update failed:", nameError);
         }
       }
 

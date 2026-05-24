@@ -12,6 +12,8 @@
  * Screens should not interact with it directly.
  */
 
+import { logger } from '../../services/logger';
+
 type OwnerKind = 'recorder' | 'player';
 
 interface Owner {
@@ -35,9 +37,8 @@ export const soundCoordinator = {
   acquire(id: string, kind: OwnerKind, onPreempt: () => void) {
     if (currentOwner && currentOwner.id !== id) {
       const now = Date.now();
-      if (__DEV__ && now - lastPreemptAt < PREEMPT_WARNING_WINDOW_MS) {
-        // eslint-disable-next-line no-console
-        console.warn(
+      if (now - lastPreemptAt < PREEMPT_WARNING_WINDOW_MS) {
+        logger.warn(
           `[soundCoordinator] rapid preempt detected: ${currentOwner.kind}(${currentOwner.id}) -> ${kind}(${id}) within ${now - lastPreemptAt}ms`,
         );
       }

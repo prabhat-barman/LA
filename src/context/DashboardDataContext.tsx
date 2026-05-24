@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { useToast } from './ToastContext';
 import { getItem, setItem } from '../utils/secureStorage';
 import apiClient from '../services/apiClient';
+import { logger } from '../services/logger';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { persistBackendActiveSubscription } from '../utils/subscriptionValidator';
 
@@ -33,7 +34,7 @@ export const DashboardDataProvider: React.FC<{ children: React.ReactNode }> = ({
       await apiClient.post(API_ENDPOINTS.SET_TIMEZONE, { timezone: deviceTimezone });
       await setItem('timezone_synced', 'true');
     } catch (err) {
-      console.warn('Silent timezone sync failed:', err);
+      logger.warn('Silent timezone sync failed:', err);
     }
   }, []);
 
@@ -51,7 +52,7 @@ export const DashboardDataProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       await setItem('device_token_registered', 'true');
     } catch (err) {
-      console.warn('Silent device token registration failed:', err);
+      logger.warn('Silent device token registration failed:', err);
     }
   }, []);
 
@@ -150,9 +151,9 @@ export const DashboardDataProvider: React.FC<{ children: React.ReactNode }> = ({
           : isTimeout
             ? 'timeout'
             : 'offline';
-        console.warn(`Dashboard load skipped (${tag}):`, message);
+        logger.warn(`Dashboard load skipped (${tag}):`, message);
       } else {
-        console.error('Failed to load dashboard data:', error);
+        logger.error(error, 'Failed to load dashboard data');
       }
 
       // Hydrate from offline storage cache regardless — better to show stale

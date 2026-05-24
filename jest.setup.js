@@ -82,6 +82,116 @@ jest.mock('react-native-image-picker', () => ({
   launchImageLibrary: jest.fn().mockResolvedValue({ assets: [] }),
 }));
 
-jest.mock('@react-native-async-storage/async-storage', () =>
-  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
-);
+jest.mock('react-native-webview', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    WebView: React.forwardRef((props, _ref) =>
+      React.createElement('RNCWebView', props),
+    ),
+    default: React.forwardRef((props, _ref) =>
+      React.createElement('RNCWebView', props),
+    ),
+  };
+});
+
+jest.mock('react-native-youtube-iframe', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: React.forwardRef((props, _ref) =>
+      React.createElement('YoutubePlayer', props),
+    ),
+  };
+});
+
+jest.mock('react-native-video', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: React.forwardRef((props, _ref) =>
+      React.createElement('Video', props),
+    ),
+  };
+});
+
+jest.mock('react-native-image-viewing', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: props =>
+      props.visible ? React.createElement('ImageView', props) : null,
+  };
+});
+
+jest.mock('react-native-fs', () => ({
+  CachesDirectoryPath: '/tmp',
+  DocumentDirectoryPath: '/tmp',
+  exists: jest.fn().mockResolvedValue(false),
+  unlink: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  readFile: jest.fn().mockResolvedValue(''),
+}));
+
+jest.mock('@react-native-community/netinfo', () => ({
+  __esModule: true,
+  default: {
+    addEventListener: jest.fn(() => () => {}),
+    fetch: jest.fn().mockResolvedValue({
+      isConnected: true,
+      isInternetReachable: true,
+      type: 'wifi',
+    }),
+  },
+}));
+
+jest.mock('react-native-permissions', () => ({
+  check: jest.fn().mockResolvedValue('granted'),
+  request: jest.fn().mockResolvedValue('granted'),
+  checkMultiple: jest.fn().mockResolvedValue({}),
+  requestMultiple: jest.fn().mockResolvedValue({}),
+  openSettings: jest.fn().mockResolvedValue(undefined),
+  PERMISSIONS: {
+    IOS: { MICROPHONE: 'ios.permission.MICROPHONE' },
+    ANDROID: { RECORD_AUDIO: 'android.permission.RECORD_AUDIO' },
+  },
+  RESULTS: {
+    GRANTED: 'granted',
+    DENIED: 'denied',
+    BLOCKED: 'blocked',
+    UNAVAILABLE: 'unavailable',
+    LIMITED: 'limited',
+  },
+}));
+
+// Inline AsyncStorage mock — v3.x of @react-native-async-storage/async-storage
+// no longer ships the `/jest/async-storage-mock` entry, so we provide a
+// minimal in-memory implementation that covers the API surface used by the app.
+jest.mock('@react-native-async-storage/async-storage', () => {
+  let store = new Map();
+  return {
+    __esModule: true,
+    default: {
+      setItem: jest.fn(async (key, value) => {
+        store.set(key, value);
+      }),
+      getItem: jest.fn(async key => store.get(key) ?? null),
+      removeItem: jest.fn(async key => {
+        store.delete(key);
+      }),
+      clear: jest.fn(async () => {
+        store.clear();
+      }),
+      getAllKeys: jest.fn(async () => Array.from(store.keys())),
+      multiGet: jest.fn(async keys =>
+        keys.map(k => [k, store.get(k) ?? null]),
+      ),
+      multiSet: jest.fn(async pairs => {
+        pairs.forEach(([k, v]) => store.set(k, v));
+      }),
+      multiRemove: jest.fn(async keys => {
+        keys.forEach(k => store.delete(k));
+      }),
+    },
+  };
+});

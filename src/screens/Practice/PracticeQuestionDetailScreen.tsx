@@ -12,6 +12,7 @@ import {
   Modal,
   Alert,
   Linking,
+  TextInput,
 } from 'react-native';
 import {
   useNavigation,
@@ -253,6 +254,12 @@ const HeaderGraphIcon: React.FC<{ size?: number; color?: string }> = ({ size = s
   </Svg>
 );
 
+const RedWarningIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(18), color = '#FF3B30' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 const ensureArray = (v: any): string[] => {
   if (!v) return [];
   if (Array.isArray(v)) return v.map(String).filter(Boolean);
@@ -421,6 +428,21 @@ const computeOverallPercent = (scoreArr: any): number => {
   return max === 0 ? 0 : Math.round((total / max) * 100);
 };
 
+const computeOverallRaw = (scoreArr: any): number => {
+  if (!Array.isArray(scoreArr) || scoreArr.length === 0) return 0;
+  let total = 0;
+  let max = 0;
+  for (const s of scoreArr) {
+    const n = Number(s?.score);
+    const from = Number(s?.from ?? 90);
+    if (!isNaN(n) && from > 0) {
+      total += n;
+      max += from;
+    }
+  }
+  return max === 0 ? 0 : Math.round((total / max) * 90);
+};
+
 // The backend sometimes returns `user` as an array (single-entry) and
 // sometimes as an object. Resolve to a display name in either case.
 const getAttemptUserName = (user: any): string => {
@@ -538,6 +560,12 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null);
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
 
+  // Report Modal States
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [additionalDetails, setAdditionalDetails] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+
   // New redesign states
   const [selectedMode, setSelectedMode] = useState<'Normal' | 'One Line Strategy'>('Normal');
   const [activeHistoryTab, setActiveHistoryTab] = useState<'me' | 'others'>('me');
@@ -546,6 +574,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const [showTranslation, setShowTranslation] = useState(false);
   const [showSampleResponse, setShowSampleResponse] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+
+  // Tracks which attempt row's recorded audio is currently playing (null when none).
+  const [playingAttemptId, setPlayingAttemptId] = useState<string | number | null>(null);
 
   const isCore = isPteCore();
 
@@ -715,6 +746,48 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   // any other active player (question audio, recorded review, etc.).
   const samplePlayer = useAudioPlayer();
 
+  // Dedicated player for the user's previously recorded attempt audio shown in
+  // the Me / Others history list. Reset the highlighted row whenever playback
+  // ends naturally or another player preempts this one.
+  const attemptPlayer = useAudioPlayer({
+    onComplete: () => setPlayingAttemptId(null),
+    onPreempt: () => setPlayingAttemptId(null),
+  });
+
+  // Toggle attempt audio playback. If the same row is tapped again we stop;
+  // otherwise we resolve the S3 URL from the `file` field and start playback.
+  const handleToggleAttemptAudio = useCallback(
+    (attempt: any) => {
+      const rawFile: string | undefined = attempt?.file;
+      if (!rawFile) {
+        showToast('No recording available for this attempt.', 'error');
+        return;
+      }
+      const attemptId = attempt?.id ?? rawFile;
+
+      if (playingAttemptId === attemptId && attemptPlayer.isPlaying) {
+        attemptPlayer.stop().catch(() => {});
+        setPlayingAttemptId(null);
+        return;
+      }
+
+      const url = resolveAudioUrl(rawFile);
+      if (!url) {
+        showToast('Unable to resolve attempt audio URL.', 'error');
+        return;
+      }
+
+      setPlayingAttemptId(attemptId);
+      attemptPlayer
+        .play(url)
+        .then((ok) => {
+          if (!ok) setPlayingAttemptId(null);
+        })
+        .catch(() => setPlayingAttemptId(null));
+    },
+    [attemptPlayer, playingAttemptId, resolveAudioUrl, showToast],
+  );
+
   // ── Fetch Question Detail & Attempts ─────────────────────────────────────
   // ── Fetch Question Detail & Attempts ─────────────────────────────────────
   const fetchQuestionDetail = useCallback(async (qId: string | number) => {
@@ -725,8 +798,10 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     setIsSubmitting(false);
     setAttempts([]);
     setOthersAttempts([]);
+    setPlayingAttemptId(null);
     await mediaConsoleRef.current?.reset();
     await samplePlayer.stop();
+    await attemptPlayer.stop();
 
     try {
       // Uses the v1 list endpoint in "open question" mode: it returns the same
@@ -884,10 +959,43 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       return () => {
         mediaConsoleRef.current?.reset().catch(() => {});
         samplePlayer.stop().catch(() => {});
+        attemptPlayer.stop().catch(() => {});
+        setPlayingAttemptId(null);
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
   );
+
+  // ── Submit Question Report ───────────────────────────────────────────────
+  const submitReport = async () => {
+    if (!selectedReason) {
+      showToast('Please select a reason for reporting.', 'error');
+      return;
+    }
+    setSubmittingReport(true);
+    try {
+      const formData = new FormData();
+      const feedbackText = additionalDetails.trim() || selectedReason || 'No details provided';
+      formData.append('question_id', String(currentQuestionId));
+      formData.append('reason', selectedReason);
+      formData.append('feedback', feedbackText);
+      formData.append('message', feedbackText);
+      formData.append('comment', feedbackText);
+      formData.append('details', feedbackText);
+      formData.append('text', feedbackText);
+
+      await apiClient.post(API_ENDPOINTS.REPORT, formData);
+      
+      showToast('Report submitted successfully. Thank you!', 'success');
+      setSelectedReason(null);
+      setAdditionalDetails('');
+      setReportModalVisible(false);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to submit report. Please try again.', 'error');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
 
   // ── Submit Answer & Parse Scores ────────────────────────────────────────
   const submitAnswer = async () => {
@@ -897,6 +1005,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }
     // Make sure no playback is still occupying the native audio slot.
     await samplePlayer.stop();
+    await attemptPlayer.stop();
+    setPlayingAttemptId(null);
     setIsSubmitting(true);
 
     try {
@@ -1673,8 +1783,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                 {/* Card Footer Row */}
                 <View style={styles.cardFooterRow}>
                   <Text style={styles.attemptCountText}>{attempts.length} X ATTEMPTED</Text>
-                  <TouchableOpacity style={styles.reportBtn}>
+                  <TouchableOpacity style={styles.reportBtn} onPress={() => setReportModalVisible(true)}>
                     <ReportFlagIcon size={scale(14)} color="#8E8E93" />
+                    <Text style={styles.reportBtnText}>Report</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -1692,13 +1803,23 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               <View style={styles.logsTabSwitcher}>
                 <TouchableOpacity
                   style={[styles.logsTabBtn, activeHistoryTab === 'me' && styles.logsTabBtnActive]}
-                  onPress={() => setActiveHistoryTab('me')}
+                  onPress={() => {
+                    if (activeHistoryTab === 'me') return;
+                    attemptPlayer.stop().catch(() => {});
+                    setPlayingAttemptId(null);
+                    setActiveHistoryTab('me');
+                  }}
                 >
                   <Text style={[styles.logsTabText, activeHistoryTab === 'me' && styles.logsTabTextActive]}>Me</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.logsTabBtn, activeHistoryTab === 'others' && styles.logsTabBtnActive]}
-                  onPress={() => setActiveHistoryTab('others')}
+                  onPress={() => {
+                    if (activeHistoryTab === 'others') return;
+                    attemptPlayer.stop().catch(() => {});
+                    setPlayingAttemptId(null);
+                    setActiveHistoryTab('others');
+                  }}
                 >
                   <Text style={[styles.logsTabText, activeHistoryTab === 'others' && styles.logsTabTextActive]}>Others</Text>
                 </TouchableOpacity>
@@ -1747,6 +1868,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                 <MemoizedAttemptsList
                   attempts={activeHistoryTab === 'me' ? sortedAttempts : sortedOthersAttempts}
                   isOthers={activeHistoryTab === 'others'}
+                  playingAttemptId={playingAttemptId}
+                  isAttemptPlaying={attemptPlayer.isPlaying}
+                  onToggleAttemptAudio={handleToggleAttemptAudio}
                 />
               )}
             </View>
@@ -1926,6 +2050,108 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* ── Report Issue Modal ── */}
+      <Modal
+        visible={reportModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setSelectedReason(null);
+          setAdditionalDetails('');
+          setReportModalVisible(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.reportModalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderTitleBlock}>
+                <View style={styles.reportHeaderIconContainer}>
+                  <RedWarningIcon size={scale(16)} color="#FF3B30" />
+                </View>
+                <View>
+                  <Text style={styles.modalTitleText}>Report Issue</Text>
+                  <Text style={styles.modalSubtitleText}>Help us improve the content</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseIconBtn}
+                onPress={() => {
+                  setSelectedReason(null);
+                  setAdditionalDetails('');
+                  setReportModalVisible(false);
+                }}
+              >
+                <CloseIcon size={scale(18)} color="#1C1C1E" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
+              {/* Select Reason */}
+              <Text style={styles.reportSectionHeading}>Select reason for reporting</Text>
+              
+              <View style={styles.reasonsPillContainer}>
+                {[
+                  "Inaccurate Translation",
+                  "Technical Glitch",
+                  "Incorrect Model Answer",
+                  "Audio Quality Issue",
+                  "Other"
+                ].map((reason) => {
+                  const isSelected = selectedReason === reason;
+                  return (
+                    <TouchableOpacity
+                      key={reason}
+                      style={[
+                        styles.reasonPill,
+                        isSelected && styles.reasonPillActive
+                      ]}
+                      onPress={() => setSelectedReason(reason)}
+                    >
+                      <Text
+                        style={[
+                          styles.reasonPillText,
+                          isSelected && styles.reasonPillTextActive
+                        ]}
+                      >
+                        {reason}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Additional Details */}
+              <Text style={styles.reportSectionHeading}>Additional details (optional)</Text>
+              <TextInput
+                style={styles.detailsInput}
+                multiline
+                numberOfLines={4}
+                placeholder="Tell us more about the issue...."
+                placeholderTextColor="#8E8E93"
+                value={additionalDetails}
+                onChangeText={setAdditionalDetails}
+                textAlignVertical="top"
+              />
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[
+                  styles.submitReportBtn,
+                  (!selectedReason || submittingReport) && styles.submitReportBtnDisabled
+                ]}
+                onPress={submitReport}
+                disabled={!selectedReason || submittingReport}
+              >
+                <Text style={styles.submitReportBtnText}>
+                  {submittingReport ? 'Submitting...' : 'Submit Report'}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1934,15 +2160,63 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 interface MemoizedAttemptsListProps {
   attempts: any[];
   isOthers?: boolean;
+  playingAttemptId?: string | number | null;
+  isAttemptPlaying?: boolean;
+  onToggleAttemptAudio?: (attempt: any) => void;
 }
 
-const AttemptItem = React.memo(({ attempt, isOthers }: { attempt: any; isOthers?: boolean }) => {
+interface AttemptItemProps {
+  attempt: any;
+  isOthers?: boolean;
+  isThisPlaying?: boolean;
+  onToggleAudio?: (attempt: any) => void;
+}
+
+// Small inline play/stop button used inside an attempt row. Renders nothing
+// when the attempt has no associated recording file.
+const AttemptAudioButton: React.FC<{
+  hasFile: boolean;
+  isPlaying: boolean;
+  onPress: () => void;
+}> = ({ hasFile, isPlaying, onPress }) => {
+  if (!hasFile) return null;
+  return (
+    <TouchableOpacity
+      style={[
+        styles.attemptPlayBtn,
+        isPlaying && styles.attemptPlayBtnActive,
+      ]}
+      onPress={onPress}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel={isPlaying ? 'Stop attempt audio' : 'Play attempt audio'}
+    >
+      {isPlaying ? (
+        <Svg width={scale(10)} height={scale(10)} viewBox="0 0 24 24" fill="none">
+          <Rect x="6" y="4" width="4" height="16" rx="1" fill="#FFFFFF" />
+          <Rect x="14" y="4" width="4" height="16" rx="1" fill="#FFFFFF" />
+        </Svg>
+      ) : (
+        <Svg width={scale(10)} height={scale(10)} viewBox="0 0 24 24" fill="#FFFFFF">
+          <Path d="M8 5v14l11-7z" fill="#FFFFFF" />
+        </Svg>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+const AttemptItem = React.memo(({ attempt, isOthers, isThisPlaying, onToggleAudio }: AttemptItemProps) => {
   const flatOverall =
     attempt.score_percent ?? attempt.percentage ?? attempt.overall_score;
-  const aScore =
+  const aPercent =
     typeof flatOverall === 'number' && !isNaN(flatOverall)
       ? Math.round(flatOverall)
       : computeOverallPercent(attempt.score);
+  const aRaw =
+    typeof flatOverall === 'number' && !isNaN(flatOverall)
+      ? Math.round((flatOverall / 100) * 90)
+      : computeOverallRaw(attempt.score);
+
   const contentScore =
     getSubscoreByType(attempt.score, 0) || resolveSubscore(attempt.content);
   const fluencyScore =
@@ -1951,6 +2225,9 @@ const AttemptItem = React.memo(({ attempt, isOthers }: { attempt: any; isOthers?
     getSubscoreByType(attempt.score, 2) ||
     resolveSubscore(attempt.pronunciation);
   const aDate = formatAttemptDate(attempt.created_at ?? attempt.date);
+
+  const hasAudioFile = Boolean(attempt?.file);
+  const handlePlay = () => onToggleAudio?.(attempt);
 
   if (isOthers) {
     const attemptName = getAttemptUserName(attempt.user);
@@ -1964,13 +2241,18 @@ const AttemptItem = React.memo(({ attempt, isOthers }: { attempt: any; isOthers?
             C: {contentScore} | F: {fluencyScore} | P: {pronScore}
           </Text>
         </View>
+        <AttemptAudioButton
+          hasFile={hasAudioFile}
+          isPlaying={!!isThisPlaying}
+          onPress={handlePlay}
+        />
         <View
           style={[
             styles.attemptScoreBadge,
-            { backgroundColor: getOverlayScoreColor(aScore) },
+            { backgroundColor: getOverlayScoreColor(aPercent) },
           ]}
         >
-          <Text style={styles.attemptScoreBadgeText}>{aScore}%</Text>
+          <Text style={styles.attemptScoreBadgeText}>{aRaw}</Text>
         </View>
       </View>
     );
@@ -1978,25 +2260,36 @@ const AttemptItem = React.memo(({ attempt, isOthers }: { attempt: any; isOthers?
 
   return (
     <View style={styles.attemptLogItem}>
-      <View>
+      <View style={{ flex: 1, paddingRight: scale(8) }}>
         <Text style={styles.attemptDate}>{aDate}</Text>
         <Text style={styles.attemptSubscores}>
           C: {contentScore} | F: {fluencyScore} | P: {pronScore}
         </Text>
       </View>
+      <AttemptAudioButton
+        hasFile={hasAudioFile}
+        isPlaying={!!isThisPlaying}
+        onPress={handlePlay}
+      />
       <View
         style={[
           styles.attemptScoreBadge,
-          { backgroundColor: getOverlayScoreColor(aScore) },
+          { backgroundColor: getOverlayScoreColor(aPercent) },
         ]}
       >
-        <Text style={styles.attemptScoreBadgeText}>{aScore}%</Text>
+        <Text style={styles.attemptScoreBadgeText}>{aRaw}</Text>
       </View>
     </View>
   );
 });
 
-const MemoizedAttemptsList = React.memo(({ attempts, isOthers }: MemoizedAttemptsListProps) => {
+const MemoizedAttemptsList = React.memo(({
+  attempts,
+  isOthers,
+  playingAttemptId,
+  isAttemptPlaying,
+  onToggleAttemptAudio,
+}: MemoizedAttemptsListProps) => {
   const [limit, setLimit] = useState(10);
 
   // Reset limit when attempts change (e.g., switching questions or tabs)
@@ -2016,13 +2309,22 @@ const MemoizedAttemptsList = React.memo(({ attempts, isOthers }: MemoizedAttempt
 
   return (
     <>
-      {visibleAttempts.map((attempt, index) => (
-        <AttemptItem
-          key={attempt.id ?? index}
-          attempt={attempt}
-          isOthers={isOthers}
-        />
-      ))}
+      {visibleAttempts.map((attempt, index) => {
+        const aId = attempt?.id ?? attempt?.file ?? index;
+        const isThisPlaying =
+          !!isAttemptPlaying &&
+          playingAttemptId != null &&
+          (playingAttemptId === attempt?.id || playingAttemptId === attempt?.file);
+        return (
+          <AttemptItem
+            key={aId}
+            attempt={attempt}
+            isOthers={isOthers}
+            isThisPlaying={isThisPlaying}
+            onToggleAudio={onToggleAttemptAudio}
+          />
+        );
+      })}
       {attempts.length > limit && (
         <TouchableOpacity
           style={styles.loadMoreAttemptsBtn}
@@ -2613,10 +2915,20 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   reportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E5E5EA',
     borderRadius: scale(6),
-    padding: scale(6),
+    paddingVertical: scale(6),
+    paddingHorizontal: scale(10),
+    gap: scale(6),
+    backgroundColor: '#FFFFFF',
+  },
+  reportBtnText: {
+    fontSize: scale(11),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#8E8E93',
   },
   // ── Logs / History Section ──
   logsSection: {
@@ -2736,6 +3048,18 @@ const styles = StyleSheet.create({
     fontSize: scale(9),
     fontFamily: 'BricolageGrotesque-Regular',
     color: '#8E8E93',
+  },
+  attemptPlayBtn: {
+    width: scale(22),
+    height: scale(22),
+    borderRadius: scale(11),
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: scale(8),
+  },
+  attemptPlayBtnActive: {
+    backgroundColor: '#FF3B30',
   },
   attemptScoreBadge: {
     borderRadius: scale(6),
@@ -3050,6 +3374,89 @@ const styles = StyleSheet.create({
     marginTop: scale(12),
   },
   closeOverlayBtnText: {
+    color: colors.white,
+    fontSize: scale(13),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+  reportModalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: scale(20),
+    borderTopRightRadius: scale(20),
+    height: '70%',
+    padding: scale(16),
+  },
+  reportHeaderIconContainer: {
+    backgroundColor: '#FFF0F0',
+    padding: scale(6),
+    borderRadius: scale(8),
+  },
+  reportSectionHeading: {
+    fontSize: scale(13),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#1C1F2A',
+    marginTop: scale(16),
+    marginBottom: scale(12),
+  },
+  reasonsPillContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: scale(8),
+    marginBottom: scale(12),
+  },
+  reasonPill: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: scale(8),
+    paddingVertical: scale(8),
+    paddingHorizontal: scale(12),
+    backgroundColor: '#FFFFFF',
+  },
+  reasonPillActive: {
+    borderColor: '#94C23C',
+    backgroundColor: '#F5FBEA',
+  },
+  reasonPillText: {
+    fontFamily: 'BricolageGrotesque-Medium',
+    fontSize: scale(11.5),
+    color: '#48484A',
+  },
+  reasonPillTextActive: {
+    color: '#94C23C',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+  detailsInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: scale(10),
+    padding: scale(12),
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Regular',
+    height: scale(90),
+    color: '#1C1F2A',
+    backgroundColor: '#FAFAFA',
+    marginBottom: scale(20),
+  },
+  submitReportBtn: {
+    backgroundColor: '#94C23C',
+    borderRadius: scale(12),
+    paddingVertical: scale(14),
+    alignItems: 'center',
+    shadowColor: '#94C23C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
+    marginBottom: scale(16),
+  },
+  submitReportBtnDisabled: {
+    backgroundColor: '#C5C5C7',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  submitReportBtnText: {
     color: colors.white,
     fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Bold',

@@ -47,6 +47,7 @@ import { useAudioPlayer } from '../../hooks/practiceMedia';
 import { MediaConsole, MediaConsoleRef } from '../../components/practiceMedia';
 import { LocalErrorBoundary } from '../../components/organisms/LocalErrorBoundary';
 import { InteractionManager } from 'react-native';
+import { WebView } from 'react-native-webview';
 
 const { width: screenWidth } = Dimensions.get('window');
 const scale = (size: number) => (screenWidth / 375) * size;
@@ -443,6 +444,37 @@ const computeOverallRaw = (scoreArr: any): number => {
   return max === 0 ? 0 : Math.round((total / max) * 90);
 };
 
+// Pull the *user's recorded* audio filename out of an attempt row. The
+// backend uses slightly different field names across Me / Others responses,
+// so we check several known shapes. We deliberately DO NOT fall back to
+// any nested `question.media_link` etc. — that is the question prompt
+// audio, not the user's recording, and would point to a different S3 path.
+const getAttemptAudioFile = (attempt: any): string | undefined => {
+  if (!attempt || typeof attempt !== 'object') return undefined;
+  const candidates = [
+    attempt.file,
+    attempt.audio,
+    attempt.audio_file,
+    attempt.audio_path,
+    attempt.recording,
+    attempt.recording_file,
+    attempt.recording_path,
+    attempt.answer_file,
+    attempt.answer_audio,
+    attempt.user_audio,
+    attempt.user_recording,
+    attempt.media_file,
+    attempt.attempt_file,
+    attempt.attempt_audio,
+    attempt.voice_file,
+    attempt.voice,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) return c.trim();
+  }
+  return undefined;
+};
+
 // The backend sometimes returns `user` as an array (single-entry) and
 // sometimes as an object. Resolve to a display name in either case.
 const getAttemptUserName = (user: any): string => {
@@ -746,28 +778,34 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   // any other active player (question audio, recorded review, etc.).
   const samplePlayer = useAudioPlayer();
 
-  // Dedicated player for the user's previously recorded attempt audio shown in
-  // the Me / Others history list. Reset the highlighted row whenever playback
-  // ends naturally or another player preempts this one.
-  const attemptPlayer = useAudioPlayer({
-    onComplete: () => setPlayingAttemptId(null),
-    onPreempt: () => setPlayingAttemptId(null),
-  });
+  // Attempt audio playback uses `react-native-video` (AVPlayer on iOS, ExoPlayer
+  // on Android) rather than nitro-sound. AVPlayer streams remote audio
+  // reliably regardless of S3 Content-Type, whereas nitro-sound's
+  // AVAudioPlayer(data:) path fails to sniff the format for many user-
+  // uploaded mp3s and throws kAudioFileUnsupportedFileTypeError.
+  const [attemptAudioSource, setAttemptAudioSource] = useState<string | null>(null);
+  const [attemptAudioPaused, setAttemptAudioPaused] = useState<boolean>(true);
+  const attemptAudioPlaying = !!attemptAudioSource && !attemptAudioPaused;
+
+  const stopAttemptAudio = useCallback(() => {
+    setAttemptAudioPaused(true);
+    setAttemptAudioSource(null);
+    setPlayingAttemptId(null);
+  }, []);
 
   // Toggle attempt audio playback. If the same row is tapped again we stop;
   // otherwise we resolve the S3 URL from the `file` field and start playback.
   const handleToggleAttemptAudio = useCallback(
     (attempt: any) => {
-      const rawFile: string | undefined = attempt?.file;
+      const rawFile = getAttemptAudioFile(attempt);
       if (!rawFile) {
         showToast('No recording available for this attempt.', 'error');
         return;
       }
       const attemptId = attempt?.id ?? rawFile;
 
-      if (playingAttemptId === attemptId && attemptPlayer.isPlaying) {
-        attemptPlayer.stop().catch(() => {});
-        setPlayingAttemptId(null);
+      if (playingAttemptId === attemptId && attemptAudioPlaying) {
+        stopAttemptAudio();
         return;
       }
 
@@ -777,15 +815,28 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         return;
       }
 
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[QuestionDetail] play attempt audio:', {
+          attemptId,
+          rawFile,
+          url,
+        });
+      }
+
+      // Free up the audio session from any other nitro-sound player (question
+      // audio, sample audio, etc.) so the WebView's audio element can take
+      // over cleanly. Also stop the mic recorder if it's currently capturing
+      // — the user has shifted focus to reviewing history, so we shouldn't
+      // keep recording silently in the background.
+      samplePlayer.stop().catch(() => {});
+      mediaConsoleRef.current?.stopRecordingIfActive().catch(() => {});
+
       setPlayingAttemptId(attemptId);
-      attemptPlayer
-        .play(url)
-        .then((ok) => {
-          if (!ok) setPlayingAttemptId(null);
-        })
-        .catch(() => setPlayingAttemptId(null));
+      setAttemptAudioSource(url);
+      setAttemptAudioPaused(false);
     },
-    [attemptPlayer, playingAttemptId, resolveAudioUrl, showToast],
+    [attemptAudioPlaying, playingAttemptId, resolveAudioUrl, samplePlayer, showToast, stopAttemptAudio],
   );
 
   // ── Fetch Question Detail & Attempts ─────────────────────────────────────
@@ -798,10 +849,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     setIsSubmitting(false);
     setAttempts([]);
     setOthersAttempts([]);
-    setPlayingAttemptId(null);
+    stopAttemptAudio();
     await mediaConsoleRef.current?.reset();
     await samplePlayer.stop();
-    await attemptPlayer.stop();
 
     try {
       // Uses the v1 list endpoint in "open question" mode: it returns the same
@@ -904,6 +954,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
       const res = await apiClient.post(API_ENDPOINTS.SHOW_HISTORY, formData);
       const data = res.data?.data ?? res.data ?? [];
+      if (__DEV__ && Array.isArray(data) && data.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[QuestionDetail] history (${tab}) sample item:`,
+          JSON.stringify(data[0], null, 2),
+        );
+      }
       if (Array.isArray(data)) {
         if (tab === 'me') {
           setAttempts(data);
@@ -959,8 +1016,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       return () => {
         mediaConsoleRef.current?.reset().catch(() => {});
         samplePlayer.stop().catch(() => {});
-        attemptPlayer.stop().catch(() => {});
-        setPlayingAttemptId(null);
+        stopAttemptAudio();
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []),
@@ -1005,8 +1061,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }
     // Make sure no playback is still occupying the native audio slot.
     await samplePlayer.stop();
-    await attemptPlayer.stop();
-    setPlayingAttemptId(null);
+    stopAttemptAudio();
     setIsSubmitting(true);
 
     try {
@@ -1743,6 +1798,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                               samplePlayer.stop();
                               return;
                             }
+                            stopAttemptAudio();
                             const url = resolveAudioUrl(
                               questionDetails.sample_audio ??
                                 questionDetails.sample_audio_file ??
@@ -1805,8 +1861,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   style={[styles.logsTabBtn, activeHistoryTab === 'me' && styles.logsTabBtnActive]}
                   onPress={() => {
                     if (activeHistoryTab === 'me') return;
-                    attemptPlayer.stop().catch(() => {});
-                    setPlayingAttemptId(null);
+                    stopAttemptAudio();
                     setActiveHistoryTab('me');
                   }}
                 >
@@ -1816,8 +1871,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   style={[styles.logsTabBtn, activeHistoryTab === 'others' && styles.logsTabBtnActive]}
                   onPress={() => {
                     if (activeHistoryTab === 'others') return;
-                    attemptPlayer.stop().catch(() => {});
-                    setPlayingAttemptId(null);
+                    stopAttemptAudio();
                     setActiveHistoryTab('others');
                   }}
                 >
@@ -1869,7 +1923,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   attempts={activeHistoryTab === 'me' ? sortedAttempts : sortedOthersAttempts}
                   isOthers={activeHistoryTab === 'others'}
                   playingAttemptId={playingAttemptId}
-                  isAttemptPlaying={attemptPlayer.isPlaying}
+                  isAttemptPlaying={attemptAudioPlaying}
                   onToggleAttemptAudio={handleToggleAttemptAudio}
                 />
               )}
@@ -1877,6 +1931,72 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           )}
         </ScrollView>
       )}
+
+      {/* Hidden WebView running an HTML5 <audio> element. We use this instead
+          of a native audio player because the iOS native libraries (nitro-sound
+          / AVAudioPlayer) fail to play S3-hosted mp3s when S3 serves them with
+          a non-audio Content-Type. Mobile Safari's media stack is far more
+          forgiving and matches the behaviour users see in a desktop browser.
+          The wrapping View pushes the WebView completely off-screen and
+          prevents it from intercepting any taps. */}
+      {attemptAudioSource ? (
+        <View pointerEvents="none" style={styles.hiddenAttemptVideoContainer}>
+          <WebView
+            key={attemptAudioSource}
+            source={{
+              html: `<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1"/></head>
+<body style="margin:0;background:transparent;">
+<audio id="a" src="${attemptAudioSource}" autoplay playsinline preload="auto"></audio>
+<script>
+  (function(){
+    var a = document.getElementById('a');
+    function post(o){ try { window.ReactNativeWebView.postMessage(JSON.stringify(o)); } catch(e){} }
+    a.addEventListener('ended', function(){ post({ type: 'ended' }); });
+    a.addEventListener('error', function(e){
+      post({ type: 'error', code: a.error ? a.error.code : 0, message: a.error ? a.error.message : 'unknown' });
+    });
+    a.addEventListener('playing', function(){ post({ type: 'playing' }); });
+    a.addEventListener('pause', function(){ post({ type: 'pause' }); });
+    a.play().catch(function(err){ post({ type: 'error', message: String(err) }); });
+  })();
+</script>
+</body>
+</html>`,
+            }}
+            originWhitelist={['*']}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled
+            domStorageEnabled
+            onMessage={(event) => {
+              try {
+                const data = JSON.parse(event.nativeEvent.data);
+                if (__DEV__) {
+                  // eslint-disable-next-line no-console
+                  console.log('[QuestionDetail] webview audio msg:', data);
+                }
+                if (data?.type === 'ended') {
+                  stopAttemptAudio();
+                } else if (data?.type === 'error') {
+                  showToast('Could not play attempt audio.', 'error');
+                  stopAttemptAudio();
+                }
+              } catch {
+                // ignore unparseable messages
+              }
+            }}
+            onError={(e) => {
+              if (__DEV__) {
+                // eslint-disable-next-line no-console
+                console.warn('[QuestionDetail] webview load error:', e.nativeEvent);
+              }
+            }}
+            style={styles.hiddenAttemptVideo}
+          />
+        </View>
+      ) : null}
 
       {/* ── Navigation Footer ── */}
       <View style={styles.navigationFooter}>
@@ -2226,7 +2346,8 @@ const AttemptItem = React.memo(({ attempt, isOthers, isThisPlaying, onToggleAudi
     resolveSubscore(attempt.pronunciation);
   const aDate = formatAttemptDate(attempt.created_at ?? attempt.date);
 
-  const hasAudioFile = Boolean(attempt?.file);
+  const audioFile = getAttemptAudioFile(attempt);
+  const hasAudioFile = Boolean(audioFile);
   const handlePlay = () => onToggleAudio?.(attempt);
 
   if (isOthers) {
@@ -2310,11 +2431,12 @@ const MemoizedAttemptsList = React.memo(({
   return (
     <>
       {visibleAttempts.map((attempt, index) => {
-        const aId = attempt?.id ?? attempt?.file ?? index;
+        const aFile = getAttemptAudioFile(attempt);
+        const aId = attempt?.id ?? aFile ?? index;
         const isThisPlaying =
           !!isAttemptPlaying &&
           playingAttemptId != null &&
-          (playingAttemptId === attempt?.id || playingAttemptId === attempt?.file);
+          (playingAttemptId === attempt?.id || playingAttemptId === aFile);
         return (
           <AttemptItem
             key={aId}
@@ -3060,6 +3182,21 @@ const styles = StyleSheet.create({
   },
   attemptPlayBtnActive: {
     backgroundColor: '#FF3B30',
+  },
+  hiddenAttemptVideoContainer: {
+    position: 'absolute',
+    top: -1000,
+    left: -1000,
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
+  },
+  hiddenAttemptVideo: {
+    width: 1,
+    height: 1,
+    backgroundColor: 'transparent',
+    opacity: 0,
   },
   attemptScoreBadge: {
     borderRadius: scale(6),

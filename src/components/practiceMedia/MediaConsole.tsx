@@ -15,6 +15,14 @@ export interface MediaConsoleRef {
   replayAudio: () => Promise<void>;
   getRecordedUri: () => string | null;
   getRecordingDurationSec: () => number;
+  /**
+   * If the recorder is currently capturing audio, stop it cleanly. No-op
+   * otherwise. Used by callers that want to free the mic without doing a
+   * full reset of the question media flow.
+   */
+  stopRecordingIfActive: () => Promise<void>;
+  /** Current media phase, e.g. 'recording', 'audio_playing', 'review'. */
+  getPhase: () => string;
 }
 
 interface MediaConsoleProps {
@@ -81,6 +89,12 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
     getRecordingDurationSec: () => {
       return mediaFlow.recordingDurationSec;
     },
+    stopRecordingIfActive: async () => {
+      if (mediaFlow.phase === 'recording') {
+        await mediaFlow.stopRecording();
+      }
+    },
+    getPhase: () => mediaFlow.phase,
   }));
 
   return (

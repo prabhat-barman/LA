@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Dimensions } from 'react-native';
 import { colors } from '../../theme/colors';
 import { PlayIcon, CaretDownIcon, OpenBookIcon } from '../atoms/Icon';
 import { useRecorder } from '../../context/RecorderContext';
 import { LiveAudioProgressBar } from './LiveAudioProgressBar';
 import { MediaStatusInline } from './MediaStatusInline';
+import { UnifiedMediaBar } from './UnifiedMediaBar';
 import { Data, QuestionMetadata } from '../../config/practiceData';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -50,10 +51,13 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
 }, ref) => {
   const [selectedSpeed, setSelectedSpeed] = useState(1.0);
   const [speedDropdownOpen, setSpeedDropdownOpen] = useState(false);
+  // The voice list is purely cosmetic right now — the codebase doesn't have
+  // a TTS / voice-switch backend wired up yet. Keeping state here so the
+  // UI is ready when the API lands.
+  const [selectedVoiceId, setSelectedVoiceId] = useState('william');
 
   const mediaFlow = useRecorder();
 
-  // Initialize the global recorder when question parameters change
   useEffect(() => {
     mediaFlow.initQuestion({
       metadata,
@@ -64,18 +68,15 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
     });
   }, [metadata, isCore, questionAudioUrl, questionDetailsLoaded, onError]);
 
-  // Sync playback rate to hook
   const { setPlaybackRate } = mediaFlow;
   useEffect(() => {
     setPlaybackRate(selectedSpeed).catch(() => {});
   }, [selectedSpeed, setPlaybackRate]);
 
-  // Sync recorded URI changes back to parent
   useEffect(() => {
     onRecordedUriChange(mediaFlow.recordedUri, mediaFlow.recordingDurationSec);
   }, [mediaFlow.recordedUri, mediaFlow.recordingDurationSec, onRecordedUriChange]);
 
-  // Expose handles to parent via ref
   useImperativeHandle(ref, () => ({
     reset: async () => {
       await mediaFlow.reset();
@@ -83,12 +84,8 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
     replayAudio: async () => {
       await mediaFlow.replayAudio();
     },
-    getRecordedUri: () => {
-      return mediaFlow.recordedUri;
-    },
-    getRecordingDurationSec: () => {
-      return mediaFlow.recordingDurationSec;
-    },
+    getRecordedUri: () => mediaFlow.recordedUri,
+    getRecordingDurationSec: () => mediaFlow.recordingDurationSec,
     stopRecordingIfActive: async () => {
       if (mediaFlow.phase === 'recording') {
         await mediaFlow.stopRecording();
@@ -97,9 +94,37 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
     getPhase: () => mediaFlow.phase,
   }));
 
+  const hasRecording = metadata.recordingDuration > 0;
+  // Audio-and-record question types (Repeat Sentence, Re-tell Lecture,
+  // Answer Short Questions, Respond to a Situation, Summarize Discussion)
+  // get the new two-card layout that matches the Figma mockup. Other
+  // question types — listening-only (Summarize Spoken Text, MCQs, etc.)
+  // and record-only (Read Aloud, Describe Image) — continue to render the
+  // legacy layout, which they were not part of in the redesign.
+  const useTwoCardLayout = metadata.hasAudio && hasRecording;
+
+  if (useTwoCardLayout) {
+    return (
+      <View style={styles.consoleContainer}>
+        <UnifiedMediaBar
+          hasAudio={metadata.hasAudio}
+          hasRecording={hasRecording}
+          maxRecordingSec={metadata.recordingDuration}
+          recordedUri={mediaFlow.recordedUri}
+          recordingDurationSec={mediaFlow.recordingDurationSec}
+          isSubmitting={isSubmitting}
+          selectedSpeed={selectedSpeed}
+          onSelectSpeed={setSelectedSpeed}
+          selectedVoiceId={selectedVoiceId}
+          onSelectVoice={setSelectedVoiceId}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.consoleContainer}>
-      {/* Audio question display (Repeat Sentence, Retell Lecture, ASQ) */}
+      {/* Audio question display (listening-only question types) */}
       {metadata.hasAudio && (
         <View style={styles.audioDisplayContainer}>
           <View style={styles.audioIconBadge}>
@@ -119,7 +144,6 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
               <Text style={styles.questionAudioPlayText}>Play Audio</Text>
             </TouchableOpacity>
           )}
-
 
           {/* Speed Controls Selector */}
           <View style={styles.speedControlsWrapper}>
@@ -154,7 +178,6 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
         </View>
       )}
 
-      {/* Integrated Status / Controls (Prep / Recording / Review) */}
       <View style={styles.statusSectionDivider} />
 
       <MediaStatusInline flow={mediaFlow} isSubmitting={isSubmitting} />
@@ -186,33 +209,6 @@ const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque-SemiBold',
     color: '#1C1F2A',
     marginBottom: scale(12),
-  },
-  playbackProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingHorizontal: scale(8),
-    marginBottom: scale(16),
-  },
-  progressTimeText: {
-    fontSize: scale(10),
-    fontFamily: 'BricolageGrotesque-Regular',
-    color: '#8E8E93',
-    width: scale(32),
-    textAlign: 'center',
-  },
-  progressBarBg: {
-    flex: 1,
-    height: scale(6),
-    backgroundColor: '#E5E5EA',
-    borderRadius: scale(3),
-    marginHorizontal: scale(8),
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#007AFF',
-    borderRadius: scale(3),
   },
   questionAudioPlayBtn: {
     flexDirection: 'row',

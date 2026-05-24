@@ -41,6 +41,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CaretDownIcon,
+  CheckIcon,
 } from '../../components/atoms/Icon';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { useAudioPlayer } from '../../hooks/practiceMedia';
@@ -2009,18 +2010,38 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           <Text style={[styles.navFooterOutlineText, currentIndex === 0 && styles.navFooterOutlineTextDisabled]}>Previous</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.navFooterSubmitBtn,
-            (!recordedUri || isSubmitting) && styles.navFooterSubmitBtnDisabled
-          ]}
-          onPress={submitAnswer}
-          disabled={!recordedUri || isSubmitting}
-        >
-          <Text style={styles.navFooterSubmitText}>
-            {isSubmitting ? 'Submitting...' : 'Submit'}
-          </Text>
-        </TouchableOpacity>
+        {(() => {
+          // Submit button has three visual states:
+          //   1. Idle / disabled — no recording yet (greyed out)
+          //   2. Active green — recording present, ready to submit
+          //   3. Submitted — `scoreResult` populated for the current question
+          //      (resets to null when navigating between questions)
+          const hasSubmitted = !!scoreResult;
+          const isDisabled = !recordedUri || isSubmitting || hasSubmitted;
+          return (
+            <TouchableOpacity
+              style={[
+                styles.navFooterSubmitBtn,
+                isDisabled && !hasSubmitted && styles.navFooterSubmitBtnDisabled,
+                hasSubmitted && styles.navFooterSubmitBtnSubmitted,
+              ]}
+              onPress={submitAnswer}
+              disabled={isDisabled}
+              activeOpacity={hasSubmitted ? 1 : 0.7}
+            >
+              {hasSubmitted ? (
+                <View style={styles.navFooterSubmitContent}>
+                  <Text style={styles.navFooterSubmitText}>Submitted</Text>
+                  <CheckIcon size={scale(14)} color="#FFFFFF" strokeWidth={3} />
+                </View>
+              ) : (
+                <Text style={styles.navFooterSubmitText}>
+                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          );
+        })()}
 
         <TouchableOpacity
           style={[styles.navFooterOutlineBtn, currentIndex === questionsList.length - 1 && styles.navFooterOutlineBtnDisabled]}
@@ -3273,6 +3294,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#C5C5C7',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  navFooterSubmitBtnSubmitted: {
+    backgroundColor: '#94C23C',
+  },
+  navFooterSubmitContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(6),
   },
   navFooterSubmitText: {
     color: colors.white,

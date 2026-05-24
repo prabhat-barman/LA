@@ -14,4 +14,5 @@ export { MediaConsole } from './MediaConsole';
 export type { MediaConsoleRef } from './MediaConsole';
 export { LiveTimerText } from './LiveTimerText';
 export { LiveAudioProgressBar } from './LiveAudioProgressBar';
+export { UnifiedMediaBar } from './UnifiedMediaBar';
 

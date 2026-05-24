@@ -423,19 +423,12 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
     );
   }
 
-  // ── Action button row (Stop / Play / etc.) ──
+  // ── Action button row (Record Now / Retake / Try Again) ──
+  // Note: there's no separate Stop button here. While `phase === 'recording'`
+  // the red circular leftButton already lets the user stop the take, so a
+  // duplicate full-width pill below would just be visual noise.
   let actionButton: React.ReactNode = null;
-  if (phase === 'recording') {
-    actionButton = (
-      <TouchableOpacity
-        style={styles.stopBtn}
-        onPress={() => flow.stopRecording()}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.stopBtnText}>Stop</Text>
-      </TouchableOpacity>
-    );
-  } else if (phase === 'prep_countdown') {
+  if (phase === 'prep_countdown') {
     actionButton = (
       <TouchableOpacity
         style={styles.recordNowBtn}
@@ -806,58 +799,37 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Action row inside the recorded card
+  // Action row inside the recorded card. Children stretch to the card
+  // width so Record Now / Try Again render as full-width pills.
   actionRow: {
-    alignItems: 'flex-start',
-  },
-  stopBtn: {
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(18),
-    backgroundColor: '#FFF8EB',
-  },
-  stopBtnText: {
-    color: '#B97900',
-    fontSize: scale(12),
-    fontFamily: 'BricolageGrotesque-Bold',
-    fontWeight: 'bold',
-  },
-  playPillBtn: {
-    backgroundColor: '#94C23C',
-    borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(20),
-  },
-  playPillBtnText: {
-    color: colors.white,
-    fontSize: scale(12),
-    fontFamily: 'BricolageGrotesque-Bold',
-    fontWeight: 'bold',
+    width: '100%',
   },
   recordNowBtn: {
+    width: '100%',
     backgroundColor: '#94C23C',
     borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(18),
+    paddingVertical: scale(10),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   recordNowBtnText: {
     color: colors.white,
-    fontSize: scale(12),
+    fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Bold',
     fontWeight: 'bold',
   },
   retakeBtn: {
+    width: '100%',
     borderWidth: 1,
     borderColor: '#8E8E93',
     borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(18),
+    paddingVertical: scale(10),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   retakeBtnText: {
     color: '#48484A',
-    fontSize: scale(12),
+    fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Bold',
     fontWeight: 'bold',
   },

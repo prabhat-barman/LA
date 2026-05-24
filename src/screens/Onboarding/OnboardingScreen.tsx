@@ -8,8 +8,8 @@ import {
   Animated,
   Easing,
   Dimensions,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -73,8 +73,13 @@ const FloatingAsset = ({ SvgComponent, radius, speed, startAngle, size }: any) =
 
 const OnboardingScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
   const baseSize = width;
   const illustrationHeight = baseSize * 1.1;
+  // Make sure the "Sign In" link clears the Android gesture bar.
+  // SafeAreaView from react-native doesn't pad the bottom on Android,
+  // so we mix in the safe-area inset manually with a sensible floor.
+  const bottomPadding = Math.max(scale(20), insets.bottom + scale(8));
 
   const handleStartToday = () => {
     navigation.navigate('SignUp');
@@ -156,7 +161,7 @@ const OnboardingScreen = () => {
               />
             </View>
 
-            <View style={styles.bottomSection}>
+            <View style={[styles.bottomSection, { paddingBottom: bottomPadding }]}>
               <Text style={styles.title}>
                 Your Journey to{"\n"}Excellence Starts Here
               </Text>
@@ -170,6 +175,9 @@ const OnboardingScreen = () => {
                 activeOpacity={0.8}
                 style={styles.buttonWrapper}
                 onPress={handleStartToday}
+                accessibilityRole="button"
+                accessibilityLabel="Start Today"
+                accessibilityHint="Creates a new account"
               >
                 <LinearGradient
                   colors={[colors.accentLight, colors.accent]}
@@ -179,7 +187,15 @@ const OnboardingScreen = () => {
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.loginLink} onPress={handleSignIn}>
+              <TouchableOpacity
+                style={styles.loginLink}
+                onPress={handleSignIn}
+                activeOpacity={0.7}
+                hitSlop={{ top: 16, bottom: 16, left: 24, right: 24 }}
+                accessibilityRole="button"
+                accessibilityLabel="Already have an account? Sign In"
+                accessibilityHint="Opens the sign in screen"
+              >
                 <Text style={styles.alreadyAccountText}>
                   Already have an account?{" "}
                 </Text>
@@ -314,6 +330,10 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     flexDirection: 'row',
+    paddingVertical: scale(12),
+    paddingHorizontal: scale(16),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   alreadyAccountText: {
     ...theme.typography.regular,

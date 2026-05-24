@@ -723,6 +723,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     setTranslationText(null);
     setScoreResult(null);
     setIsSubmitting(false);
+    setAttempts([]);
+    setOthersAttempts([]);
     await mediaConsoleRef.current?.reset();
     await samplePlayer.stop();
 
@@ -772,13 +774,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         arr.find((q) => String(q?.id) === String(qId)) ?? arr[0] ?? {};
       setQuestionDetails(data);
 
-      // Seed the "Me" attempts history directly from the response so we don't
-      // have to make a second SHOW_HISTORY call for this tab.
-      if (Array.isArray(data?.attempted)) {
-        setAttempts(data.attempted);
-      } else {
-        setAttempts([]);
-      }
+      // We do not seed the attempts history from data.attempted because it is incomplete and missing computed scores.
+      // History is fetched dynamically from the SHOW_HISTORY API below.
       // Resolve the saved tag colour from any of the shapes the backend uses:
       //   1. Canonical: `tag` is an array of relations like
       //      [{ id, question_id, user_id, tag: "green", ... }] (latest wins).
@@ -857,16 +854,18 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }
   }, []);
 
-  // Auto-fetch attempts when currentQuestionId or activeHistoryTab changes.
-  // The "Me" tab is already populated by `fetchQuestionDetail` from the
-  // single v1/question response, so we only need to fetch when the user
-  // switches to the "Others" tab.
-  // We gate the fetch with renderPhase >= 5 to defer third-party requests.
+  // Auto-fetch attempts when currentQuestionId, activeHistoryTab, or loading status changes.
+  // We fetch "me" history at renderPhase >= 4 (when the attempts panel mounts) and once loading is complete.
+  // We fetch "others" history at renderPhase >= 5 (lazy load) and once loading is complete.
   useEffect(() => {
-    if (currentQuestionId && activeHistoryTab === 'others' && renderPhase >= 5) {
-      fetchHistoryAttempts(currentQuestionId, activeHistoryTab);
+    if (!currentQuestionId || loading) return;
+
+    if (activeHistoryTab === 'me' && renderPhase >= 4) {
+      fetchHistoryAttempts(currentQuestionId, 'me');
+    } else if (activeHistoryTab === 'others' && renderPhase >= 5) {
+      fetchHistoryAttempts(currentQuestionId, 'others');
     }
-  }, [currentQuestionId, activeHistoryTab, fetchHistoryAttempts, renderPhase]);
+  }, [currentQuestionId, activeHistoryTab, fetchHistoryAttempts, renderPhase, loading]);
 
 
   // Load question on current index change. Cleanup is owned by the hooks

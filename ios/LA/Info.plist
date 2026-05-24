@@ -98,5 +98,9 @@
 	<string>This app requires access to your photo library to select a profile picture.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app requires access to your microphone to test your mic and record practice answers.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>

@@ -2,9 +2,10 @@ import React from 'react';
 import { Animated, Text, TouchableOpacity, View } from 'react-native';
 import { mediaStyles } from './styles';
 import { WaveformBar } from './WaveformBar';
+import { LiveTimerText } from './LiveTimerText';
 
 interface RecordingPanelProps {
-  secondsLeft: number;
+  secondsLeft?: number; // kept optional for type safety during transition
   amplitude: Animated.Value | number;
   onStop: () => void;
   /** Number of waveform bars to render. Defaults to 24. */
@@ -20,7 +21,6 @@ interface RecordingPanelProps {
  * UI slot.
  */
 export const RecordingPanel: React.FC<RecordingPanelProps> = ({
-  secondsLeft,
   amplitude,
   onStop,
   barCount = 24,
@@ -34,8 +34,9 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({
           <View style={mediaStyles.recordingDot} />
           <Text style={mediaStyles.recordingBadgeText}>{badgeLabel}</Text>
         </View>
-        <Text style={mediaStyles.recordingTimer}>{secondsLeft}s</Text>
+        <LiveTimerText style={mediaStyles.recordingTimer} suffix="s" />
       </View>
+
 
       <View style={mediaStyles.waveformContainer}>
         {Array.from({ length: barCount }).map((_, i) => (

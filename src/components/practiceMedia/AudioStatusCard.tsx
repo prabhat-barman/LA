@@ -2,13 +2,12 @@ import React from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { mediaStyles, scale } from './styles';
+import { LiveTimerText } from './LiveTimerText';
 
 /**
  * "Audio starting in Ns" pre-roll banner. Used when `metadata.waitTimeBeforeAudio > 0`.
  */
-export const AudioWaitCard: React.FC<{ secondsLeft: number }> = ({
-  secondsLeft,
-}) => {
+export const AudioWaitCard: React.FC<{ secondsLeft?: number }> = () => {
   return (
     <View style={mediaStyles.rowContainer}>
       <Svg width={scale(14)} height={scale(14)} viewBox="0 0 24 24" fill="none">
@@ -18,11 +17,12 @@ export const AudioWaitCard: React.FC<{ secondsLeft: number }> = ({
       </Svg>
       <Text style={[mediaStyles.inlineText, mediaStyles.iconLeftSpacer]}>
         Audio starting in{' '}
-        <Text style={mediaStyles.boldText}>{secondsLeft}s</Text>
+        <LiveTimerText style={mediaStyles.boldText} suffix="s" />
       </Text>
     </View>
   );
 };
+
 
 /**
  * "Listening to audio..." banner with a Skip CTA. Shown while question audio

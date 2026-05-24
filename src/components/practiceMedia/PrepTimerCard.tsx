@@ -2,9 +2,10 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { MicIcon } from '../atoms/Icon';
 import { mediaStyles, scale } from './styles';
+import { LiveTimerText } from './LiveTimerText';
 
 interface PrepTimerCardProps {
-  secondsLeft: number;
+  secondsLeft?: number; // kept optional for type safety
   onRecordNow: () => void;
   label?: string;
   ctaLabel?: string;
@@ -16,7 +17,6 @@ interface PrepTimerCardProps {
  * jump straight into recording.
  */
 export const PrepTimerCard: React.FC<PrepTimerCardProps> = ({
-  secondsLeft,
   onRecordNow,
   label = 'Prep Time',
   ctaLabel = 'Record Now',
@@ -26,7 +26,7 @@ export const PrepTimerCard: React.FC<PrepTimerCardProps> = ({
       <View style={mediaStyles.prepRow}>
         <Text style={mediaStyles.prepText}>
           {label}:{' '}
-          <Text style={mediaStyles.prepTimerText}>{secondsLeft}s</Text>
+          <LiveTimerText style={mediaStyles.prepTimerText} suffix="s" />
         </Text>
         <TouchableOpacity style={mediaStyles.recordNowBtn} onPress={onRecordNow}>
           <MicIcon size={scale(14)} color="#FFFFFF" />
@@ -36,3 +36,4 @@ export const PrepTimerCard: React.FC<PrepTimerCardProps> = ({
     </View>
   );
 };
+

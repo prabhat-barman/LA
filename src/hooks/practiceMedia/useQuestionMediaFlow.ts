@@ -23,11 +23,16 @@ export interface UseQuestionMediaFlowConfig {
    * the screen needs to call `start()` manually (e.g. after fetching data).
    */
   autoStart?: boolean;
+  /**
+   * Initial playback rate for question audio (0.5..2.0). Use the returned
+   * `setPlaybackRate()` to change it mid-flow (e.g. from a speed picker).
+   */
+  initialPlaybackRate?: number;
   /** Fires once the question audio playback finishes (or is skipped). */
   onAudioFinish?: () => void;
   /** Fires once the user's voice recording completes. */
   onRecordingFinish?: (uri: string | null, durationSec: number) => void;
-  /** Fires on permission denial / recorder failures. */
+  /** Fires on permission denial / recorder failures / interruptions. */
   onError?: (message: string) => void;
 }
 
@@ -40,6 +45,8 @@ export interface UseQuestionMediaFlowReturn {
   audioPositionMs: number;
   audioDurationMs: number;
   audioProgress: number;
+  /** Current playback rate of the question audio. */
+  playbackRate: number;
 
   /** User's captured recording. Available from `review` onwards. */
   recordedUri: string | null;
@@ -58,6 +65,12 @@ export interface UseQuestionMediaFlowReturn {
   // Actions
   /** Manually kick off the flow when `autoStart` is false. */
   start: () => void;
+  /**
+   * Replay JUST the question audio without re-entering the prep/recording
+   * cycle. Use this for "Play Audio" buttons in `review` / `audio_done`
+   * states — calling `start()` would clobber a captured recording.
+   */
+  replayAudio: () => Promise<void>;
   /** Skip the currently-playing question audio. */
   skipAudio: () => Promise<void>;
   /** Skip the prep countdown and start recording immediately ("Record Now" button). */
@@ -68,6 +81,8 @@ export interface UseQuestionMediaFlowReturn {
   retake: () => void;
   /** Tear everything down (call this on unmount or before navigating to a new question). */
   reset: () => Promise<void>;
+  /** Update the playback rate for the question audio (and apply immediately if playing). */
+  setPlaybackRate: (rate: number) => Promise<void>;
 }
 
 const hasRecording = (m: QuestionMetadata) =>
@@ -81,6 +96,7 @@ export const useQuestionMediaFlow = (
     isCore,
     audioUrl,
     autoStart = true,
+    initialPlaybackRate = 1.0,
     onAudioFinish,
     onRecordingFinish,
     onError,
@@ -119,39 +135,53 @@ export const useQuestionMediaFlow = (
   // Forward declarations so callbacks can reference each other safely.
   const startPrepCountdownRef = useRef<() => void>(() => {});
   const startRecordingRef = useRef<() => Promise<void>>(async () => {});
+  // Ref to the recorder's captured recording so the player handlers can
+  // check "do we already have a recording?" without resorting to a circular
+  // hook dependency (the recorder hook is constructed below `player`).
+  const recordedRef = useRef<{ uri: string; durationSec: number } | null>(null);
+
+  // Resolve "where should we land when the question audio finishes?"
+  //
+  // Priority:
+  //   1. If the user already has a captured recording, go back to `review`
+  //      — this is the replay-from-review case where restarting the prep
+  //      cycle would clobber their answer.
+  //   2. If this question expects a recording (`recordingDuration > 0`)
+  //      and we don't have one yet, kick off the prep countdown.
+  //   3. Otherwise the question is listening-only — land in `audio_done`.
+  const settleAfterAudio = useCallback(() => {
+    if (recordedRef.current) {
+      setPhase('review');
+      setSecondsLeft(0);
+      return;
+    }
+    if (hasRecording(metadata)) {
+      startPrepCountdownRef.current();
+    } else {
+      setPhase('audio_done');
+      setSecondsLeft(0);
+    }
+  }, [metadata]);
 
   const player = useAudioPlayer({
+    initialRate: initialPlaybackRate,
     onComplete: () => {
       if (phaseRef.current !== 'audio_playing') return;
       onAudioFinishRef.current?.();
-      if (hasRecording(metadata)) {
-        startPrepCountdownRef.current();
-      } else {
-        setPhase('audio_done');
-        setSecondsLeft(0);
-      }
+      settleAfterAudio();
     },
     onPreempt: () => {
       // If something else took the playback slot mid-question-audio we don't
       // want the UI to stay in `audio_playing` forever.
       if (phaseRef.current === 'audio_playing') {
-        if (hasRecording(metadata)) {
-          startPrepCountdownRef.current();
-        } else {
-          setPhase('audio_done');
-          setSecondsLeft(0);
-        }
+        settleAfterAudio();
       }
     },
     onError: (_err) => {
       // Surface to dev tools but keep the flow advancing so the user isn't
       // stranded on a silent audio screen.
       onAudioFinishRef.current?.();
-      if (hasRecording(metadata)) {
-        startPrepCountdownRef.current();
-      } else {
-        setPhase('audio_done');
-      }
+      settleAfterAudio();
     },
   });
 
@@ -164,14 +194,36 @@ export const useQuestionMediaFlow = (
       onRecordingFinishRef.current?.(uri, elapsedSec);
     },
     onError: (_err, code) => {
-      if (code === 'permission') {
-        onErrorRef.current?.(
-          'Microphone permission is required to practice speaking.',
-        );
-      } else {
-        onErrorRef.current?.('Failed to start recording.');
+      switch (code) {
+        case 'permission':
+          onErrorRef.current?.(
+            'Microphone permission is required to practice speaking.',
+          );
+          break;
+        case 'interrupted':
+          onErrorRef.current?.(
+            'Recording was interrupted (you left the app). Please retake.',
+          );
+          break;
+        case 'empty':
+          onErrorRef.current?.(
+            "We couldn't capture any audio — please check your mic and retake.",
+          );
+          break;
+        case 'stop':
+          // Stop errors are usually transient and we already moved to
+          // 'review' in onFinish; no user-facing message needed.
+          break;
+        default:
+          onErrorRef.current?.('Failed to start recording.');
       }
-      setPhase('review');
+      // For permission/start errors there is no recording, so the orchestrator
+      // should land in review (existing behaviour). For 'interrupted' / 'empty'
+      // the recorder already routes through onFinish(null, _) so phase is set
+      // there — guard against double-set.
+      if (phaseRef.current !== 'review') {
+        setPhase('review');
+      }
     },
   });
 
@@ -288,6 +340,23 @@ export const useQuestionMediaFlow = (
     startPrepCountdown,
   ]);
 
+  // Replay just the audio without restarting the prep/recording cycle.
+  // Safe to call from any phase — preserves whatever recording the user
+  // has captured (which `start()` would discard). When playback finishes,
+  // `settleAfterAudio` checks `recordedRef` and lands back in `review` if
+  // a recording exists, otherwise routes to prep/audio_done as usual.
+  const replayAudio = useCallback(async () => {
+    if (!audioUrl || !metadata.hasAudio) return;
+    clearCountdown();
+    setPhase('audio_playing');
+    setSecondsLeft(0);
+    const ok = await player.play(audioUrl);
+    if (!ok && phaseRef.current === 'audio_playing') {
+      // Best-effort recover — drop back to whatever phase makes sense.
+      settleAfterAudio();
+    }
+  }, [audioUrl, clearCountdown, metadata, player, settleAfterAudio]);
+
   // Wire autoStart. Re-run whenever the configured metadata/audio URL changes
   // — typical case: navigating to a new question in the same screen.
   useEffect(() => {
@@ -297,6 +366,8 @@ export const useQuestionMediaFlow = (
     return () => {
       clearCountdown();
     };
+    // `start` is stable per metadata.id+audioUrl thanks to useCallback, so
+    // omitting it here is safe and avoids the autoStart loop on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart, audioUrl, metadata.id]);
 
@@ -348,21 +419,67 @@ export const useQuestionMediaFlow = (
     setSecondsLeft(0);
   }, [clearCountdown, player, recorder]);
 
+  // Destructure the stable setter rather than depending on the whole
+  // `player` object (which is recreated every render). Without this,
+  // `setPlaybackRate` changes identity each render and any consumer
+  // useEffect that lists it as a dep fires every render — death by a
+  // thousand re-renders during an active recording, where the recorder's
+  // tick re-renders the orchestrator every second.
+  const { setRate: playerSetRate } = player;
+  const setPlaybackRate = useCallback(
+    async (rate: number) => {
+      await playerSetRate(rate);
+    },
+    [playerSetRate],
+  );
+
+  // Keep `recordedRef` in lock-step with the recorder's captured recording
+  // so the player handlers (which can't reference `recorder` directly —
+  // their hook is constructed BEFORE the recorder) can read the latest
+  // value synchronously when audio playback ends.
+  useEffect(() => {
+    recordedRef.current = recorder.recording;
+  }, [recorder.recording]);
+
+  // Belt-and-braces unmount cleanup. Player + recorder hooks already do
+  // their own teardown on unmount, but the orchestrator also owns the
+  // countdown interval, so we sweep it here too. Done synchronously to
+  // avoid leaking a timer in fast-unmount edge cases.
+  useEffect(() => {
+    return () => {
+      clearCountdown();
+    };
+  }, [clearCountdown]);
+
   return {
     phase,
-    secondsLeft: phase === 'recording' ? recorder.secondsRemaining : secondsLeft,
+    // During the brief window between `setPhase('recording')` and native
+    // `Sound.startRecorder` resolving, the recorder hasn't flipped
+    // `isRecording=true` yet — its derived `secondsRemaining` is still 0.
+    // We fall back to the orchestrator's `secondsLeft` (set to
+    // `metadata.recordingDuration` inside `startRecording`) so the user
+    // never sees a "0s" flash before the countdown starts ticking down.
+    secondsLeft:
+      phase === 'recording'
+        ? recorder.isRecording
+          ? recorder.secondsRemaining
+          : secondsLeft
+        : secondsLeft,
     audioPositionMs: player.positionMs,
     audioDurationMs: player.durationMs,
     audioProgress: player.progress,
+    playbackRate: player.rate,
     recordedUri: recorder.recording?.uri ?? null,
     recordingDurationSec: recorder.recording?.durationSec ?? 0,
     amplitude: recorder.amplitude,
     resolvedPrepTimeSec,
     start,
+    replayAudio,
     skipAudio,
     startRecordingNow,
     stopRecording,
     retake,
     reset,
+    setPlaybackRate,
   };
 };

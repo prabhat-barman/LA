@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { useToast } from './ToastContext';
 import { getItem, setItem } from '../utils/secureStorage';
@@ -153,16 +153,16 @@ export const DashboardDataProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [showToast, syncTimezone, registerDeviceToken]);
 
+  const contextValue = useMemo(() => ({
+    dashboardData,
+    loading,
+    refreshing,
+    hasNotifications,
+    loadDashboardData,
+  }), [dashboardData, loading, refreshing, hasNotifications, loadDashboardData]);
+
   return (
-    <DashboardDataContext.Provider
-      value={{
-        dashboardData,
-        loading,
-        refreshing,
-        hasNotifications,
-        loadDashboardData,
-      }}
-    >
+    <DashboardDataContext.Provider value={contextValue}>
       {children}
     </DashboardDataContext.Provider>
   );

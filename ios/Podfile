@@ -8,6 +8,17 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
+def node_require(script)
+  require Pod::Executable.execute_command('node', ['-p',
+    "require.resolve('#{script}', {paths: [process.argv[1]]})", __dir__]).strip
+end
+
+node_require('react-native-permissions/scripts/setup.rb')
+
+setup_permissions([
+  'Microphone',
+])
+
 use_modular_headers!
 
 linkage = ENV['USE_FRAMEWORKS']

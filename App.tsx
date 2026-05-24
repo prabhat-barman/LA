@@ -6,6 +6,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { ToastProvider } from './src/context/ToastContext';
 import { UserProvider } from './src/context/UserContext';
 import { DashboardDataProvider } from './src/context/DashboardDataContext';
+import { RecorderProvider } from './src/context/RecorderContext';
 import { ErrorBoundary } from './src/components/organisms/ErrorBoundary';
 import { configureGoogleSignIn } from './src/services/socialAuthService';
 
@@ -27,17 +28,19 @@ function App() {
         <ToastProvider>
           <UserProvider>
             <DashboardDataProvider>
-              <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-              <KeyboardAvoidingView
-                // On Android, AndroidManifest sets windowSoftInputMode=adjustResize,
-                // which already shrinks the layout when the keyboard appears. Using
-                // KeyboardAvoidingView with behavior="height" on top of that causes
-                // a double-resize and content bouncing on focus.
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                style={styles.container}
-              >
-                <AppNavigator />
-              </KeyboardAvoidingView>
+              <RecorderProvider>
+                <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+                <KeyboardAvoidingView
+                  // On Android, AndroidManifest sets windowSoftInputMode=adjustResize,
+                  // which already shrinks the layout when the keyboard appears. Using
+                  // KeyboardAvoidingView with behavior="height" on top of that causes
+                  // a double-resize and content bouncing on focus.
+                  behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                  style={styles.container}
+                >
+                  <AppNavigator />
+                </KeyboardAvoidingView>
+              </RecorderProvider>
             </DashboardDataProvider>
           </UserProvider>
         </ToastProvider>
@@ -45,6 +48,7 @@ function App() {
     </SafeAreaProvider>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

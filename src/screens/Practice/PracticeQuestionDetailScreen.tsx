@@ -2899,7 +2899,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   outlineBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2907,6 +2908,7 @@ const styles = StyleSheet.create({
     borderColor: '#8E8E93',
     borderRadius: scale(8),
     paddingVertical: scale(8),
+    paddingHorizontal: scale(8),
     gap: scale(4),
   },
   outlineBtnActive: {

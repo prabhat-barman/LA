@@ -27,7 +27,7 @@ import { RefundPolicyScreen } from '../screens/Profile/RefundPolicyScreen';
 import { FAQScreen } from '../screens/Profile/FAQScreen';
 import { NotificationsListScreen } from '../screens/Profile/NotificationsListScreen';
 import { PracticeCommonListScreen } from '../screens/Practice/PracticeCommonListScreen';
-import { PracticeQuestionDetailScreen } from '../screens/Practice/PracticeQuestionDetailScreen'; // refresh-trigger
+import { PracticeQuestionDetailScreen } from '../screens/Practice/PracticeQuestionDetail';
 import { PdfListScreen } from '../screens/Menu/PdfListScreen';
 import { MicrophoneSetupScreen } from '../screens/Microphone/MicrophoneSetupScreen';
 import { LiveSessionsScreen } from '../screens/LiveSessions/LiveSessionsScreen';

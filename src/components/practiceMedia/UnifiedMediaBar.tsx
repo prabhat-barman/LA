@@ -447,9 +447,9 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
     );
   } else if (phase === 'review' && !recordedUri) {
     // Recording failed or produced an empty clip — give the user a way
-    // out. The mockup doesn't show this state, but the previous review
-    // panel had a "Record Answer" affordance and removing it would strand
-    // the user.
+    // out. `retake()` skips the audio re-roll and goes straight to the
+    // prep countdown, which is the right move here because the audio has
+    // already been heard.
     actionButton = (
       <TouchableOpacity
         style={styles.retakeBtn}
@@ -457,6 +457,25 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
         activeOpacity={0.85}
       >
         <Text style={styles.retakeBtnText}>Record Answer</Text>
+      </TouchableOpacity>
+    );
+  } else if (phase === 'review' && recordedUri) {
+    // Successful recording — let the user redo the entire question from
+    // the audio wait time. Unlike `retake()` (which only resets the
+    // recorder), this chains `reset()` -> `start()` so the question
+    // audio plays again before the next prep countdown. Submit gets
+    // disabled automatically because `reset()` clears `recordedUri`.
+    actionButton = (
+      <TouchableOpacity
+        style={styles.retakeBtn}
+        onPress={() => {
+          flow.reset()
+            .then(() => flow.start())
+            .catch(() => {});
+        }}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.retakeBtnText}>Try Again</Text>
       </TouchableOpacity>
     );
   }
@@ -656,9 +675,23 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
     );
   }
 
+  // Sequential layout: while the question audio is still in its pre-roll
+  // (`idle` / `audio_wait`) or actively playing (`audio_playing`), only the
+  // Question Audio card + Speed/Voice controls are visible — these are the
+  // only affordances that matter before the user has heard the prompt. Once
+  // the audio finishes (`audio_done` and onward: prep countdown, recording,
+  // review), the question card and its controls collapse out and the
+  // Recorded card takes over the surface. Cheap conditional render — both
+  // sub-trees are unmounted when not needed, so child effects (waveform
+  // animations, audio-progress subscriptions, voice dropdowns) don't keep
+  // running in the background.
+  const phase = flow.phase;
+  const isPreRecordingPhase =
+    phase === 'idle' || phase === 'audio_wait' || phase === 'audio_playing';
+
   return (
     <View style={styles.container}>
-      {hasAudio && (
+      {hasAudio && isPreRecordingPhase && (
         <QuestionAudioCard
           audioProgress={audioProgress}
           secondsLeft={secondsLeft}
@@ -667,7 +700,7 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
         />
       )}
 
-      {hasRecording && (
+      {hasRecording && !isPreRecordingPhase && (
         <RecordedCard
           recordedUri={recordedUri}
           recordingDurationSec={recordingDurationSec}
@@ -676,7 +709,7 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
         />
       )}
 
-      {hasAudio && (
+      {hasAudio && isPreRecordingPhase && (
         <SpeedVoiceRow
           selectedSpeed={selectedSpeed}
           onSelectSpeed={onSelectSpeed}

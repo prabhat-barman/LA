@@ -1,0 +1,66 @@
+# AI / Agent analysis ignore list — keep token usage low
+# Mirrors .gitignore where useful, plus folders too noisy for context.
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+.cache/
+.next/
+tmp/
+logs/
+
+# Native build artifacts
+ios/Pods/
+ios/build/
+ios/DerivedData/
+ios/.xcode.env.local
+android/app/build/
+android/build/
+android/.gradle/
+android/.idea/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/
+
+# IDE
+.idea/
+.vscode/
+
+# OS junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Env files (secrets)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Large media (streamed from S3 in production; local copies are samples only)
+recordings/
+assets/videos/
+
+# Ruby tooling (only needed for pod install)
+.ruby-lsp/
+Gemfile.lock
+
+# Backups and temp
+*copy.md
+* copy.md
+*~
+*.swp
+*.tmp

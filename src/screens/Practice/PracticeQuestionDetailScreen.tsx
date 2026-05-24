@@ -182,7 +182,199 @@ interface ScoreResult {
   feedback?: any;
   words?: any[];
   word_details?: any[];
+  new_html?: string;
+  overall?: any;
+  new_format?: any;
 }
+
+// Subscore SVG Icons
+const SubscoreWarningIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#FFCC00' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const SubscoreChecklistIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#34C759' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const SubscoreGrammarIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#AF52DE' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M4 19h16M4 15h16M4 11h12M4 7h8" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const SubscoreBookIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#007AFF' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+const SubscoreRangeIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#FF3B30' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" />
+    <Path d="M15 9l-6 6M9 9l6 6" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const SubscoreOrgIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#FF9500' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 4v4m0 8v4m-8-8h16m-12 0v4m8-4v4" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    <Rect x="10" y="2" width="4" height="4" rx="1" stroke={color} strokeWidth="2" fill="none" />
+    <Rect x="2" y="10" width="4" height="4" rx="1" stroke={color} strokeWidth="2" fill="none" />
+    <Rect x="10" y="10" width="4" height="4" rx="1" stroke={color} strokeWidth="2" fill="none" />
+    <Rect x="18" y="10" width="4" height="4" rx="1" stroke={color} strokeWidth="2" fill="none" />
+    <Rect x="2" y="18" width="4" height="4" rx="1" stroke={color} strokeWidth="2" fill="none" />
+    <Rect x="18" y="18" width="4" height="4" rx="1" stroke={color} strokeWidth="2" fill="none" />
+  </Svg>
+);
+
+const SubscoreFluencyIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#FF9500' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" />
+    <Path d="M12 6v6l4 2" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const SubscorePronIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#AF52DE' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke={color} strokeWidth="2" />
+    <Path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" stroke={color} strokeWidth="2" strokeLinecap="round" />
+  </Svg>
+);
+
+const HeaderGraphIcon: React.FC<{ size?: number; color?: string }> = ({ size = scale(16), color = '#7C3AED' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="12" width="4" height="8" rx="1" fill={color} opacity="0.4" />
+    <Rect x="10" y="7" width="4" height="13" rx="1" fill={color} opacity="0.7" />
+    <Rect x="17" y="3" width="4" height="17" rx="1" fill={color} />
+  </Svg>
+);
+
+const ensureArray = (v: any): string[] => {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map(String).filter(Boolean);
+  if (typeof v === 'string') {
+    return v.split(/\n|\u2022|•|;/).map((s) => s.trim()).filter(Boolean);
+  }
+  if (typeof v === 'object') return Object.values(v).map(String).filter(Boolean);
+  return [];
+};
+
+const CATEGORY_DETAILS: Record<
+  string,
+  {
+    icon: React.FC<{ size?: number; color?: string }>;
+    color: string;
+    description: string;
+    defaultRemarks: string[];
+  }
+> = {
+  content: {
+    icon: SubscoreWarningIcon,
+    color: '#FFCC00',
+    description: 'How closely you read the text',
+    defaultRemarks: [
+      'You included all key words from the source text.',
+      'No additions or omissions were detected.',
+    ],
+  },
+  grammar: {
+    icon: SubscoreGrammarIcon,
+    color: '#AF52DE',
+    description: 'Sentence structure accuracy',
+    defaultRemarks: [
+      'Multiple grammar and sentence errors reduce clarity.',
+      'Needs careful proofreading for correct usage and structure.',
+    ],
+  },
+  form: {
+    icon: SubscoreChecklistIcon,
+    color: '#34C759',
+    description: 'Pronunciation and clarity',
+    defaultRemarks: [
+      'Does not follow the required 200–300 word limit.',
+      'Incorrect length affects overall scoring and evaluation.',
+    ],
+  },
+  vocabulary: {
+    icon: SubscoreBookIcon,
+    color: '#007AFF',
+    description: 'Word usage clarity',
+    defaultRemarks: [
+      'Vocabulary is too basic or used incorrectly.',
+      'Use clear academic words with correct spelling.',
+    ],
+  },
+  'linguistic range': {
+    icon: SubscoreRangeIcon,
+    color: '#FF3B30',
+    description: 'Range of language use',
+    defaultRemarks: [
+      'Limited variety in word choice and expression.',
+      'Avoid casual language; use more formal academic tone.',
+    ],
+  },
+  spelling: {
+    icon: SubscoreChecklistIcon,
+    color: '#E040FB',
+    description: 'Spelling accuracy level',
+    defaultRemarks: [
+      'Frequent spelling mistakes affect readability.',
+      'Proofread carefully and avoid uncertain words.',
+    ],
+  },
+  structure: {
+    icon: SubscoreOrgIcon,
+    color: '#FF9500',
+    description: 'Organization of ideas',
+    defaultRemarks: [
+      'Lacks clear introduction, body, and conclusion.',
+      'Ideas are not well connected due to missing transitions.',
+    ],
+  },
+  fluency: {
+    icon: SubscoreFluencyIcon,
+    color: '#FF9500',
+    description: 'Smoothness and speed of delivery',
+    defaultRemarks: [
+      'Oral fluency is natural and appropriately paced.',
+      'Minor hesitations observed but did not impact clarity.',
+    ],
+  },
+  pronunciation: {
+    icon: SubscorePronIcon,
+    color: '#AF52DE',
+    description: 'Clarity and correct sound production',
+    defaultRemarks: [
+      'Pronunciation was mostly clear and easy to understand.',
+      'Some word endings were not fully articulated.',
+    ],
+  },
+};
+
+const getCategoryDetails = (name: string) => {
+  const norm = name.toLowerCase().trim();
+  if (norm.includes('content')) return CATEGORY_DETAILS.content;
+  if (norm.includes('grammar')) return CATEGORY_DETAILS.grammar;
+  if (norm.includes('form')) return CATEGORY_DETAILS.form;
+  if (norm.includes('vocabulary') || norm.includes('vocab')) return CATEGORY_DETAILS.vocabulary;
+  if (norm.includes('linguistic') || norm.includes('range')) return CATEGORY_DETAILS['linguistic range'];
+  if (norm.includes('spelling') || norm.includes('spell')) return CATEGORY_DETAILS.spelling;
+  if (norm.includes('structure') || norm.includes('struct')) return CATEGORY_DETAILS.structure;
+  if (norm.includes('fluency') || norm.includes('oral')) return CATEGORY_DETAILS.fluency;
+  if (norm.includes('pronunciation') || norm.includes('pron')) return CATEGORY_DETAILS.pronunciation;
+
+  // fallback default
+  return {
+    icon: SubscoreChecklistIcon,
+    color: '#007AFF',
+    description: 'Evaluation criteria breakdown',
+    defaultRemarks: ['Well structured and presented.'],
+  };
+};
 
 const extractFeedbackText = (val: any): string => {
   if (!val) return '';
@@ -874,8 +1066,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   // Word color logic for highlighting modal
   const getWordColor = (word: any) => {
     if (typeof word === 'string') return '#1C1F2A';
-    const score = word?.score ?? word?.percentage ?? word?.val ?? word?.score_percent;
-    const status = String(word?.status ?? word?.color ?? word?.state ?? '').toLowerCase();
+    const score = word?.score ?? word?.percentage ?? word?.val ?? word?.score_percent ?? word?.word_score;
+    const status = String(word?.status ?? word?.color ?? word?.state ?? word?.class ?? '').toLowerCase();
 
     if (score !== undefined) {
       if (score >= 70) return '#34C759'; // good
@@ -884,13 +1076,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }
 
     if (status) {
-      if (status.includes('good') || status.includes('green') || status.includes('correct') || status === '1') {
+      if (status.includes('good') || status.includes('green') || status.includes('correct') || status.includes('success') || status === '1') {
         return '#34C759';
       }
-      if (status.includes('average') || status.includes('orange') || status.includes('yellow') || status === '2') {
+      if (status.includes('average') || status.includes('orange') || status.includes('yellow') || status.includes('warning') || status === '2') {
         return '#FF9500';
       }
-      if (status.includes('bad') || status.includes('red') || status.includes('incorrect') || status === '3') {
+      if (status.includes('bad') || status.includes('red') || status.includes('incorrect') || status.includes('danger') || status === '3') {
         return '#FF3B30';
       }
     }
@@ -898,6 +1090,16 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   };
 
   const wordsListToShow = useMemo(() => {
+    if (scoreResult?.new_html && typeof scoreResult.new_html === 'string') {
+      try {
+        const parsed = JSON.parse(scoreResult.new_html);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (e) {
+        console.warn('Failed to parse new_html', e);
+      }
+    }
     if (scoreResult?.words && Array.isArray(scoreResult.words)) {
       return scoreResult.words;
     }
@@ -909,34 +1111,169 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     return textToSplit.split(/\s+/).map(w => ({ word: w }));
   }, [scoreResult, questionText]);
 
-  // Overall circular progress value
-  const overallPercentage = useMemo(() => {
-    if (!scoreResult) return 0;
-    const rawVal = scoreResult.score_percent ?? scoreResult.percentage ?? scoreResult.overall_score ?? scoreResult.score ?? 0;
-    const n = Number(rawVal);
-    if (!isNaN(n)) {
-      if (n > 0 && n <= 1) return Math.round(n * 100);
-      if (n > 90) return Math.min(100, Math.round(n));
-      if (n >= 0 && n <= 90) return Math.round((n / 90) * 100);
-      return Math.round(n);
+  // Overall raw score and max score
+  const overallRawAndMax = useMemo(() => {
+    if (!scoreResult) return { score: 0, max: 90 };
+    
+    const overallObj = scoreResult.overall;
+    let score = 0;
+    let max = 90;
+    
+    if (overallObj && typeof overallObj === 'object') {
+      score = Number(overallObj.score ?? overallObj.score_percent ?? 0);
+      max = Number(overallObj.out_of ?? overallObj.from ?? overallObj.max ?? 90);
+    } else {
+      const rawScore = scoreResult.score_percent ?? scoreResult.percentage ?? scoreResult.overall_score ?? scoreResult.score ?? 0;
+      score = Number(rawScore);
+      max = Number(scoreResult.total_score ?? 90);
     }
-    return 0;
+    
+    // Normalize if score is a decimal ratio, e.g. 0.88 -> 80/90 or 88/100
+    if (score > 0 && score <= 1) {
+      score = Math.round(score * 90);
+    }
+    
+    return { score: Math.round(score), max: Math.round(max) };
   }, [scoreResult]);
 
-  // Breakdown values. The backend sometimes returns these as a plain
-  // number and sometimes as `{ score, out_of }` (newer shape) — pipe
-  // through `resolveSubscore` which handles both safely. Without this,
-  // rendering `{contentValue}%` for the object shape crashes React with
-  // "Objects are not valid as a React child".
-  const fluencyValue = resolveSubscore(
-    scoreResult?.fluency_score ?? scoreResult?.fluency,
-  );
-  const pronValue = resolveSubscore(
-    scoreResult?.pronunciation_score ?? scoreResult?.pronunciation,
-  );
-  const contentValue = resolveSubscore(
-    scoreResult?.content_score ?? scoreResult?.content,
-  );
+  // Overall circular progress percentage (for color/fill)
+  const overallPercentage = useMemo(() => {
+    const { score, max } = overallRawAndMax;
+    if (max <= 0) return 0;
+    return Math.round((score / max) * 100);
+  }, [overallRawAndMax]);
+
+  // Dynamically resolve subscore items
+  const resolvedSubscores = useMemo(() => {
+    if (!scoreResult) return [];
+
+    // Helper to format/match category properties
+    const buildCategory = (name: string, scoreVal: any, maxVal?: number) => {
+      const details = getCategoryDetails(name);
+      const score = resolveSubscore(scoreVal);
+      const max = maxVal ?? (name.toLowerCase().includes('content') ? 6 : name.toLowerCase().includes('fluency') || name.toLowerCase().includes('pronunciation') ? 90 : 2);
+      
+      const norm = name.toLowerCase().trim();
+      let customRemarks: string[] | undefined = undefined;
+      
+      const possibleRemarksKeys = [
+        `${norm}_remarks`,
+        `${norm}_feedback`,
+        `${norm}_bullets`,
+        `${norm}_points`,
+        `${norm}`
+      ];
+      
+      for (const k of possibleRemarksKeys) {
+        const val = (scoreResult as any)[k];
+        if (val && k !== norm) {
+          const arr = ensureArray(val);
+          if (arr.length > 0) {
+            customRemarks = arr;
+            break;
+          }
+        }
+      }
+      
+      return {
+        name,
+        score,
+        max,
+        description: details.description,
+        icon: details.icon,
+        color: details.color,
+        remarks: customRemarks && customRemarks.length > 0 ? customRemarks : details.defaultRemarks
+      };
+    };
+
+    // 1. Check new_format array
+    if (scoreResult.new_format && Array.isArray(scoreResult.new_format)) {
+      return scoreResult.new_format.map((item: any) => {
+        const name = item.name ?? item.title ?? 'Subscore';
+        const score = item.score ?? 0;
+        const max = item.out_of ?? item.max ?? item.from ?? 2;
+        const details = getCategoryDetails(name);
+        const remarks = Array.isArray(item.remarks) ? item.remarks : (item.remarks ? [item.remarks] : details.defaultRemarks);
+        return {
+          name,
+          score,
+          max,
+          description: item.description ?? details.description,
+          icon: details.icon,
+          color: details.color,
+          remarks
+        };
+      });
+    }
+
+    // 2. Check new_format object
+    if (scoreResult.new_format && typeof scoreResult.new_format === 'object') {
+      return Object.entries(scoreResult.new_format).map(([key, val]: [string, any]) => {
+        const name = key.charAt(0).toUpperCase() + key.slice(1);
+        const score = typeof val === 'object' ? (val.score ?? 0) : Number(val);
+        const max = typeof val === 'object' ? (val.out_of ?? val.max ?? val.from ?? 2) : 2;
+        const details = getCategoryDetails(name);
+        const remarks = typeof val === 'object' && Array.isArray(val.remarks) ? val.remarks : (typeof val === 'object' && val.remarks ? [val.remarks] : details.defaultRemarks);
+        return {
+          name,
+          score,
+          max,
+          description: typeof val === 'object' ? (val.description ?? details.description) : details.description,
+          icon: details.icon,
+          color: details.color,
+          remarks
+        };
+      });
+    }
+
+    // 3. Check score array
+    if (scoreResult.score && Array.isArray(scoreResult.score)) {
+      return scoreResult.score.map((item: any) => {
+        const name = item.name ?? item.title ?? (item.type === 0 ? 'Content' : item.type === 1 ? 'Fluency' : item.type === 2 ? 'Pronunciation' : 'Subscore');
+        const score = item.score ?? 0;
+        const max = item.from ?? item.out_of ?? item.max ?? 90;
+        const details = getCategoryDetails(name);
+        const remarks = Array.isArray(item.remarks) ? item.remarks : (item.remarks ? [item.remarks] : details.defaultRemarks);
+        return {
+          name,
+          score,
+          max,
+          description: item.description ?? details.description,
+          icon: details.icon,
+          color: details.color,
+          remarks
+        };
+      });
+    }
+
+    // 4. Fallback: gather from flat fields
+    const list: any[] = [];
+    const fields = [
+      { key: 'content', label: 'Content', max: 6 },
+      { key: 'fluency', label: 'Fluency', max: 90 },
+      { key: 'pronunciation', label: 'Pronunciation', max: 90 },
+      { key: 'grammar', label: 'Grammar', max: 2 },
+      { key: 'form', label: 'Form', max: 2 },
+      { key: 'vocabulary', label: 'Vocabulary', max: 2 },
+      { key: 'linguistic_range', label: 'Linguistic Range', max: 6 },
+      { key: 'spelling', label: 'Spelling', max: 2 },
+      { key: 'structure', label: 'Structure', max: 6 }
+    ];
+
+    for (const f of fields) {
+      const scoreVal = (scoreResult as any)[`${f.key}_score`] ?? (scoreResult as any)[f.key];
+      if (scoreVal !== undefined && scoreVal !== null) {
+        list.push(buildCategory(f.label, scoreVal, f.max));
+      }
+    }
+
+    if (list.length === 0) {
+      const overallVal = scoreResult.overall_score ?? scoreResult.score_percent ?? scoreResult.score ?? 0;
+      list.push(buildCategory('Content', overallVal, 90));
+    }
+
+    return list;
+  }, [scoreResult]);
 
   const sortedAttempts = useMemo(() => {
     const list = [...attempts];
@@ -1463,77 +1800,62 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           <View style={styles.modalContent}>
             {/* Modal Header */}
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitleText}>Practice Score Result</Text>
-              <TouchableOpacity onPress={() => setScoreModalVisible(false)}>
+              <View style={styles.modalHeaderTitleBlock}>
+                <View style={styles.modalHeaderIconContainer}>
+                  <HeaderGraphIcon size={scale(16)} color="#7C3AED" />
+                </View>
+                <View>
+                  <Text style={styles.modalTitleText}>Score Info</Text>
+                  <Text style={styles.modalSubtitleText}>In-depth breakdown of your evaluation</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.modalCloseIconBtn} onPress={() => setScoreModalVisible(false)}>
                 <CloseIcon size={scale(18)} color="#1C1C1E" />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false}>
-              {/* Circular Overall Score Card */}
-              <View style={styles.overallScoreCard}>
-                <CircularProgressBar
-                  size={scale(110)}
-                  strokeWidth={scale(10)}
-                  progress={overallPercentage}
-                  max={100}
-                  color={getOverlayScoreColor(overallPercentage)}
-                />
-                <Text style={styles.overallScoreText}>Overall Speaking Score</Text>
+              {/* Circular Overall Score Card & Breakdown List */}
+              <View style={styles.topScoreInfoCard}>
+                <View style={styles.topLeftProgressColumn}>
+                  <CircularProgressBar
+                    size={scale(110)}
+                    strokeWidth={scale(10)}
+                    progress={overallRawAndMax.score}
+                    max={overallRawAndMax.max}
+                    color={getOverlayScoreColor(overallPercentage)}
+                  />
+                </View>
+                
+                <View style={styles.topRightBreakdownColumn}>
+                  {resolvedSubscores.map((item, idx) => {
+                    const IconComponent = item.icon;
+                    return (
+                      <View key={idx} style={styles.topBreakdownRow}>
+                        <View style={styles.topBreakdownLabelGroup}>
+                          <IconComponent color={item.color} size={scale(14)} />
+                          <Text style={styles.topBreakdownLabel}>{item.name}</Text>
+                        </View>
+                        <Text style={styles.topBreakdownValue}>{item.score}/{item.max}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
 
-              {/* Score Breakdown Progress Bars */}
-              <View style={styles.breakdownCard}>
-                <Text style={styles.breakdownHeader}>Speaking Category Breakdown</Text>
-
-                {/* Content */}
-                <View style={styles.breakdownRow}>
-                  <View style={styles.breakdownLabelRow}>
-                    <Text style={styles.breakdownLabel}>Content</Text>
-                    <Text style={[styles.breakdownValueText, { color: getOverlayScoreColor(contentValue) }]}>
-                      {contentValue}%
-                    </Text>
-                  </View>
-                  <View style={styles.breakdownBarBg}>
-                    <View style={[styles.breakdownBarFill, { width: `${contentValue}%`, backgroundColor: getOverlayScoreColor(contentValue) }]} />
-                  </View>
-                </View>
-
-                {/* Fluency */}
-                <View style={styles.breakdownRow}>
-                  <View style={styles.breakdownLabelRow}>
-                    <Text style={styles.breakdownLabel}>Fluency</Text>
-                    <Text style={[styles.breakdownValueText, { color: getOverlayScoreColor(fluencyValue) }]}>
-                      {fluencyValue}%
-                    </Text>
-                  </View>
-                  <View style={styles.breakdownBarBg}>
-                    <View style={[styles.breakdownBarFill, { width: `${fluencyValue}%`, backgroundColor: getOverlayScoreColor(fluencyValue) }]} />
-                  </View>
-                </View>
-
-                {/* Pronunciation */}
-                <View style={styles.breakdownRow}>
-                  <View style={styles.breakdownLabelRow}>
-                    <Text style={styles.breakdownLabel}>Pronunciation</Text>
-                    <Text style={[styles.breakdownValueText, { color: getOverlayScoreColor(pronValue) }]}>
-                      {pronValue}%
-                    </Text>
-                  </View>
-                  <View style={styles.breakdownBarBg}>
-                    <View style={[styles.breakdownBarFill, { width: `${pronValue}%`, backgroundColor: getOverlayScoreColor(pronValue) }]} />
-                  </View>
-                </View>
+              {/* AI ANALYTICS Section */}
+              <View style={styles.analyticsSection}>
+                <Text style={styles.analyticsTitle}>AI ANALYTICS</Text>
+                <Text style={styles.analyticsBody}>
+                  {extractFeedbackText(scoreResult?.tutor_summary ?? scoreResult?.summary ?? scoreResult?.feedback) ||
+                    'Significant improvement needed. Focus on reading every word accurately and maintaining a steady, natural pace. Your Speed was too slow, fast up and pronounce word endings clearly.'}
+                </Text>
               </View>
 
               {/* Word-by-word Highlight Transcript */}
               <View style={styles.wordHighlightCard}>
-                <Text style={styles.wordHighlightHeader}>AI Transcription & Highlights</Text>
                 <View style={styles.wordsListWrap}>
                   {wordsListToShow.map((w, idx) => {
-                    // `w` can be a plain string OR an object like
-                    // `{ word, score, ... }`. Falling back to `w` itself
-                    // would render an object → React crash.
                     const wordText =
                       typeof w === 'string'
                         ? w
@@ -1566,19 +1888,41 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Tutor feedback summary */}
-              {!!extractFeedbackText(scoreResult?.tutor_summary ?? scoreResult?.summary ?? scoreResult?.feedback) && (
-                <View style={styles.feedbackCard}>
-                  <Text style={styles.feedbackHeader}>AI Tutor Remarks</Text>
-                  <Text style={styles.feedbackBody}>
-                    {extractFeedbackText(scoreResult?.tutor_summary ?? scoreResult?.summary ?? scoreResult?.feedback)}
-                  </Text>
-                </View>
-              )}
+              {/* Detailed Category Remarks Cards List */}
+              {resolvedSubscores.map((item, idx) => {
+                const IconComponent = item.icon;
+                return (
+                  <View key={idx} style={styles.detailRemarkCard}>
+                    <View style={styles.detailRemarkHeader}>
+                      <View style={[styles.detailIconBox, { backgroundColor: `${item.color}1A` }]}>
+                        <IconComponent color={item.color} size={scale(16)} />
+                      </View>
+                      <View style={styles.detailRemarkTitleGroup}>
+                        <Text style={styles.detailRemarkTitle}>{item.name}</Text>
+                        <Text style={styles.detailRemarkDesc}>{item.description}</Text>
+                      </View>
+                      <Text style={styles.detailRemarkScore}>
+                        {item.score}/{item.max}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.detailRemarkDivider} />
+                    
+                    <View style={styles.detailRemarkBullets}>
+                      {item.remarks.map((bullet: string, bulletIdx: number) => (
+                        <View key={bulletIdx} style={styles.detailBulletRow}>
+                          <View style={[styles.detailBulletDot, { backgroundColor: item.color }]} />
+                          <Text style={styles.detailBulletText}>{bullet}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
             </ScrollView>
 
             <TouchableOpacity style={styles.closeOverlayBtn} onPress={() => setScoreModalVisible(false)}>
-              <Text style={styles.closeOverlayBtnText}>Close Analysis</Text>
+              <Text style={styles.closeOverlayBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2498,100 +2842,115 @@ const styles = StyleSheet.create({
     paddingBottom: scale(12),
     marginBottom: scale(16),
   },
+  modalHeaderTitleBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  modalHeaderIconContainer: {
+    backgroundColor: '#F0EBF8',
+    padding: scale(6),
+    borderRadius: scale(8),
+  },
   modalTitleText: {
     fontSize: scale(16),
     fontFamily: 'BricolageGrotesque-Bold',
     fontWeight: 'bold',
     color: '#1C1F2A',
   },
+  modalSubtitleText: {
+    fontSize: scale(11),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#8E8E93',
+    marginTop: scale(2),
+  },
+  modalCloseIconBtn: {
+    padding: scale(4),
+  },
   modalScrollContent: {
     flex: 1,
   },
-  overallScoreCard: {
+  topScoreInfoCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: scale(12),
-    padding: scale(20),
-    marginBottom: scale(16),
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(16),
     borderWidth: 1,
-    borderColor: '#E5E5EA',
-  },
-  overallScoreText: {
-    fontSize: scale(13),
-    fontFamily: 'BricolageGrotesque-Bold',
-    fontWeight: 'bold',
-    color: '#1A2151',
-    marginTop: scale(12),
-  },
-  breakdownCard: {
-    backgroundColor: colors.white,
-    borderRadius: scale(12),
-    borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: '#EAECEF',
     padding: scale(16),
     marginBottom: scale(16),
+    gap: scale(16),
   },
-  breakdownHeader: {
-    fontSize: scale(13),
-    fontFamily: 'BricolageGrotesque-Bold',
-    fontWeight: 'bold',
-    color: '#1C1F2A',
-    marginBottom: scale(16),
+  topLeftProgressColumn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  breakdownRow: {
-    marginBottom: scale(12),
+  topRightBreakdownColumn: {
+    flex: 1.3,
+    gap: scale(8),
   },
-  breakdownLabelRow: {
+  topBreakdownRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: scale(4),
   },
-  breakdownLabel: {
-    fontSize: scale(12),
+  topBreakdownLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
+  },
+  topBreakdownLabel: {
     fontFamily: 'BricolageGrotesque-Medium',
+    fontSize: scale(12),
     color: '#48484A',
   },
-  breakdownValueText: {
-    fontSize: scale(12),
+  topBreakdownValue: {
     fontFamily: 'BricolageGrotesque-Bold',
+    fontSize: scale(12),
+    color: '#1C1F2A',
     fontWeight: 'bold',
   },
-  breakdownBarBg: {
-    height: scale(8),
-    backgroundColor: '#F2F2F7',
-    borderRadius: scale(4),
-    overflow: 'hidden',
-  },
-  breakdownBarFill: {
-    height: '100%',
-    borderRadius: scale(4),
-  },
-  wordHighlightCard: {
-    backgroundColor: colors.white,
-    borderRadius: scale(12),
+  analyticsSection: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: '#EAECEF',
+    borderRadius: scale(16),
     padding: scale(16),
     marginBottom: scale(16),
   },
-  wordHighlightHeader: {
-    fontSize: scale(13),
+  analyticsTitle: {
     fontFamily: 'BricolageGrotesque-Bold',
+    fontSize: scale(12),
+    color: '#7C3AED',
     fontWeight: 'bold',
-    color: '#1C1F2A',
-    marginBottom: scale(12),
+    marginBottom: scale(8),
+    letterSpacing: 0.5,
+  },
+  analyticsBody: {
+    fontFamily: 'BricolageGrotesque-Regular',
+    fontSize: scale(12),
+    color: '#48484A',
+    lineHeight: scale(18),
+  },
+  wordHighlightCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(16),
+    borderWidth: 1,
+    borderColor: '#EAECEF',
+    padding: scale(16),
+    marginBottom: scale(16),
   },
   wordsListWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: scale(6),
-    marginBottom: scale(16),
+    marginBottom: scale(12),
   },
   wordText: {
-    fontSize: scale(14),
+    fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Medium',
-    lineHeight: scale(20),
+    lineHeight: scale(18),
   },
   colorGuideRow: {
     flexDirection: 'row',
@@ -2616,29 +2975,76 @@ const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque-Medium',
     color: '#8E8E93',
   },
-  feedbackCard: {
-    backgroundColor: '#FDF8E2',
+  detailRemarkCard: {
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#FBE8B3',
-    borderRadius: scale(12),
+    borderColor: '#EAECEF',
+    borderRadius: scale(16),
     padding: scale(16),
-    marginBottom: scale(24),
+    marginBottom: scale(12),
   },
-  feedbackHeader: {
-    fontSize: scale(13),
+  detailRemarkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  detailIconBox: {
+    width: scale(32),
+    height: scale(32),
+    borderRadius: scale(8),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailRemarkTitleGroup: {
+    flex: 1,
+    marginHorizontal: scale(10),
+  },
+  detailRemarkTitle: {
     fontFamily: 'BricolageGrotesque-Bold',
+    fontSize: scale(13),
+    color: '#1C1F2A',
     fontWeight: 'bold',
-    color: '#B78103',
+  },
+  detailRemarkDesc: {
+    fontFamily: 'BricolageGrotesque-Regular',
+    fontSize: scale(10),
+    color: '#8E8E93',
+  },
+  detailRemarkScore: {
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontSize: scale(13),
+    color: '#1C1F2A',
+    fontWeight: 'bold',
+  },
+  detailRemarkDivider: {
+    height: 1,
+    backgroundColor: '#F2F2F7',
+    marginVertical: scale(12),
+  },
+  detailRemarkBullets: {
+    gap: scale(8),
+  },
+  detailBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: scale(6),
   },
-  feedbackBody: {
-    fontSize: scale(12),
+  detailBulletDot: {
+    width: scale(6),
+    height: scale(6),
+    borderRadius: scale(3),
+    marginTop: scale(6),
+    marginRight: scale(8),
+  },
+  detailBulletText: {
+    flex: 1,
     fontFamily: 'BricolageGrotesque-Regular',
-    color: '#654C02',
-    lineHeight: scale(18),
+    fontSize: scale(11.5),
+    color: '#48484A',
+    lineHeight: scale(16),
   },
   closeOverlayBtn: {
-    backgroundColor: '#1C1F2A',
+    backgroundColor: '#111827',
     borderRadius: scale(12),
     paddingVertical: scale(14),
     alignItems: 'center',

@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableWithoutFeedback,
+  InteractionManager,
+  Platform,
 } from 'react-native';
 import {
   CaretDownIcon,
@@ -193,6 +195,21 @@ export const PracticeCommonListScreen: React.FC = () => {
 
   // ── Tab state ──────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<TabName>('All');
+
+  // Phased rendering state
+  const [renderPhase, setRenderPhase] = useState<1 | 2 | 3>(1);
+
+  // Trigger rendering phases on category/tab transition
+  useEffect(() => {
+    setRenderPhase(1);
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      setRenderPhase(2);
+      requestAnimationFrame(() => {
+        setRenderPhase(3);
+      });
+    });
+    return () => interaction.cancel();
+  }, [activeCategoryId, activeTab]);
 
   // ── Questions state ───────────────────────────────────────────────────────
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
@@ -581,7 +598,7 @@ export const PracticeCommonListScreen: React.FC = () => {
   const pickerItem = pickerForId != null ? questions.find(q => q.id === pickerForId) ?? null : null;
   const pickerCurrentColor: TagColor = pickerItem ? (tagColorById.get(pickerItem.id) ?? 'none') : 'none';
 
-  const isInitialLoading = loading && questions.length === 0;
+  const isInitialLoading = (loading && questions.length === 0) || renderPhase < 2;
 
   return (
     <View style={styles.container}>
@@ -645,8 +662,10 @@ export const PracticeCommonListScreen: React.FC = () => {
               }
               onEndReached={handleLoadMore}
               onEndReachedThreshold={0.5}
-              initialNumToRender={20}
-              maxToRenderPerBatch={20}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={Platform.OS === 'android'}
               ListEmptyComponent={
                 !loading ? (
                   <View style={styles.emptyContainer}>
@@ -666,109 +685,114 @@ export const PracticeCommonListScreen: React.FC = () => {
         )}
       </View>
 
-      {/* ── Tag Colour Picker Modal ── */}
-      <Modal
-        visible={pickerItem !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerForId(null)}
-      >
-        <TouchableWithoutFeedback onPress={() => setPickerForId(null)}>
-          <View style={styles.tagPickerOverlay}>
-            <TouchableWithoutFeedback onPress={() => { /* swallow taps inside */ }}>
-              <View style={styles.tagPickerCard}>
-                <Text style={styles.tagPickerTitle} numberOfLines={2}>
-                  {pickerItem?.title ?? 'Choose tag colour'}
-                </Text>
-                {TAG_PICKER_OPTIONS.map((opt, idx, arr) => {
-                  const selected = pickerCurrentColor === opt.key;
-                  return (
-                    <TouchableOpacity
-                      key={opt.key}
-                      style={[
-                        styles.tagPickerItem,
-                        idx === arr.length - 1 && styles.tagPickerItemLast,
-                        selected && styles.tagPickerItemActive,
-                      ]}
-                      onPress={() => pickerItem && persistTagColor(pickerItem, opt.key)}
-                      disabled={!pickerItem || taggingId === pickerItem?.id}
-                      activeOpacity={0.7}
-                    >
-                      <View
-                        style={[
-                          styles.tagPickerDot,
-                          { backgroundColor: TAG_COLOR_HEX[opt.key] },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.tagPickerItemText,
-                          selected && styles.tagPickerItemTextActive,
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                      {selected && <Text style={styles.tagPickerCheck}>✓</Text>}
-                    </TouchableOpacity>
-                  );
-                })}
+      {/* ── Modals loaded progressively in Phase 3 ── */}
+      {renderPhase >= 3 && (
+        <>
+          {/* ── Tag Colour Picker Modal ── */}
+          <Modal
+            visible={pickerItem !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setPickerForId(null)}
+          >
+            <TouchableWithoutFeedback onPress={() => setPickerForId(null)}>
+              <View style={styles.tagPickerOverlay}>
+                <TouchableWithoutFeedback onPress={() => { /* swallow taps inside */ }}>
+                  <View style={styles.tagPickerCard}>
+                    <Text style={styles.tagPickerTitle} numberOfLines={2}>
+                      {pickerItem?.title ?? 'Choose tag colour'}
+                    </Text>
+                    {TAG_PICKER_OPTIONS.map((opt, idx, arr) => {
+                      const selected = pickerCurrentColor === opt.key;
+                      return (
+                        <TouchableOpacity
+                          key={opt.key}
+                          style={[
+                            styles.tagPickerItem,
+                            idx === arr.length - 1 && styles.tagPickerItemLast,
+                            selected && styles.tagPickerItemActive,
+                          ]}
+                          onPress={() => pickerItem && persistTagColor(pickerItem, opt.key)}
+                          disabled={!pickerItem || taggingId === pickerItem?.id}
+                          activeOpacity={0.7}
+                        >
+                          <View
+                            style={[
+                              styles.tagPickerDot,
+                              { backgroundColor: TAG_COLOR_HEX[opt.key] },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.tagPickerItemText,
+                              selected && styles.tagPickerItemTextActive,
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
+                          {selected && <Text style={styles.tagPickerCheck}>✓</Text>}
+                        </TouchableOpacity>
+                      );
+                    })}
 
-                {pickerCurrentColor !== 'none' && (
-                  <TouchableOpacity
-                    style={styles.tagPickerRemoveItem}
-                    onPress={() => pickerItem && persistTagColor(pickerItem, 'none')}
-                    disabled={!pickerItem || taggingId === pickerItem?.id}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.tagPickerRemoveText}>Remove tag</Text>
-                  </TouchableOpacity>
-                )}
+                    {pickerCurrentColor !== 'none' && (
+                      <TouchableOpacity
+                        style={styles.tagPickerRemoveItem}
+                        onPress={() => pickerItem && persistTagColor(pickerItem, 'none')}
+                        disabled={!pickerItem || taggingId === pickerItem?.id}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.tagPickerRemoveText}>Remove tag</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </TouchableWithoutFeedback>
               </View>
             </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+          </Modal>
 
-      {/* ── Subcategory Dropdown Modal ── */}
-      <Modal
-        visible={isDropdownOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsDropdownOpen(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setIsDropdownOpen(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Select Subcategory</Text>
-              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-                {subcategories.map((sub) => {
-                  const displayName = isCore ? (sub.pte_core_title ?? sub.title) : sub.title;
-                  const isSelected = sub.id === activeCategoryId;
-                  return (
-                    <TouchableOpacity
-                      key={sub.id}
-                      style={[styles.modalItem, isSelected && { backgroundColor: '#F2F2F7' }]}
-                      onPress={() => handleSubcategorySwitch(sub)}
-                    >
-                      <Text
-                        style={[
-                          styles.modalItemText,
-                          isSelected && { color: colors.primary, fontWeight: '700' },
-                        ]}
-                      >
-                        {displayName}
-                      </Text>
-                      {isSelected && (
-                        <CheckIcon size={scale(16)} color={colors.primary} strokeWidth={3} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+          {/* ── Subcategory Dropdown Modal ── */}
+          <Modal
+            visible={isDropdownOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setIsDropdownOpen(false)}
+          >
+            <TouchableWithoutFeedback onPress={() => setIsDropdownOpen(false)}>
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Select Subcategory</Text>
+                  <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                    {subcategories.map((sub) => {
+                      const displayName = isCore ? (sub.pte_core_title ?? sub.title) : sub.title;
+                      const isSelected = sub.id === activeCategoryId;
+                      return (
+                        <TouchableOpacity
+                          key={sub.id}
+                          style={[styles.modalItem, isSelected && { backgroundColor: '#F2F2F7' }]}
+                          onPress={() => handleSubcategorySwitch(sub)}
+                        >
+                          <Text
+                            style={[
+                              styles.modalItemText,
+                              isSelected && { color: colors.primary, fontWeight: '700' },
+                            ]}
+                          >
+                            {displayName}
+                          </Text>
+                          {isSelected && (
+                            <CheckIcon size={scale(16)} color={colors.primary} strokeWidth={3} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </Modal>
+        </>
+      )}
     </View>
   );
 };

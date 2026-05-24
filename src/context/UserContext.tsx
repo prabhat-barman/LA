@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { getItem, setItem } from '../utils/secureStorage';
 import apiClient from '../services/apiClient';
 import { API_ENDPOINTS } from '../config/apiConfig';
@@ -192,18 +192,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUser();
   }, [loadUser]);
 
+  const contextValue = useMemo(() => ({
+    user,
+    loading,
+    loadUser,
+    refreshUser,
+    updateUser,
+    updateExamDate,
+    clearUser,
+  }), [user, loading, loadUser, refreshUser, updateUser, updateExamDate, clearUser]);
+
   return (
-    <UserContext.Provider
-      value={{
-        user,
-        loading,
-        loadUser,
-        refreshUser,
-        updateUser,
-        updateExamDate,
-        clearUser,
-      }}
-    >
+    <UserContext.Provider value={contextValue}>
       {children}
     </UserContext.Provider>
   );

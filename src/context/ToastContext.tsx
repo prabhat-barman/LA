@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
 import { StyleSheet, Text, Animated, Dimensions, SafeAreaView } from 'react-native';
 import { colors } from '../theme/colors';
 import { theme } from '../theme';
@@ -76,8 +76,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const contextValue = useMemo(() => ({ showToast }), [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {visible && (
         <SafeAreaView style={styles.toastWrapper} pointerEvents="none">

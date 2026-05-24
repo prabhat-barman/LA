@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
+  InteractionManager,
 } from 'react-native';
 import { Header } from '../../components/organisms/Header';
 import { colors } from '../../theme/colors';
@@ -217,6 +218,21 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
     }
   }, [isExtensive, extensiveCache, normalCache, fetchMocks]);
 
+  // Phased rendering state
+  const [renderPhase, setRenderPhase] = useState<1 | 2 | 3>(1);
+
+  // Trigger rendering phases on toggle / category switch
+  useEffect(() => {
+    setRenderPhase(1);
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      setRenderPhase(2);
+      requestAnimationFrame(() => {
+        setRenderPhase(3);
+      });
+    });
+    return () => interaction.cancel();
+  }, [activeToggle, selectedCategory]);
+
   const onRefresh = useCallback(() => {
     fetchMocks(isExtensive, true);
   }, [fetchMocks, isExtensive]);
@@ -237,6 +253,12 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
         };
       });
   }, [currentCache, selectedCategory, hasActiveSub]);
+
+  // Phase-based subset of visible tests to optimize load times
+  const visibleTests = useMemo(() => {
+    if (renderPhase >= 3) return filteredTests;
+    return filteredTests.slice(0, 3);
+  }, [filteredTests, renderPhase]);
 
   const handleStart = (item: MockTestItem) => {
     if (item.locked) {
@@ -375,7 +397,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
 
         {/* --- Results Cards List --- */}
         <View style={styles.cardList}>
-          {loading && !refreshing ? (
+          {((loading && !refreshing) || renderPhase < 2) ? (
             <MockTestSkeleton />
           ) : error ? (
             <View style={styles.stateContainer}>
@@ -394,7 +416,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
               </Text>
             </View>
           ) : (
-            filteredTests.map((test) => (
+            visibleTests.map((test) => (
               <View
                 key={test.syntheticKey}
                 style={[styles.card, test.locked && styles.cardLocked]}
@@ -440,7 +462,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
                 </TouchableOpacity>
 
                 {/* Actions Footer row — only meaningful for unlocked / attempted tests */}
-                {!test.locked && (
+                {!test.locked && renderPhase >= 3 && (
                   <View style={styles.actionsContainer}>
                     {['Feedback', 'Score', 'Analysis', 'View'].map((action) => {
                       const key = `${action}-${test.id}`;

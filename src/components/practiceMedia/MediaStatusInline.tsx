@@ -1,5 +1,5 @@
 import React from 'react';
-import type { UseQuestionMediaFlowReturn } from '../../hooks/practiceMedia';
+import type { RecorderContextValue } from '../../context/RecorderContext';
 import {
   AudioPlayingCard,
   AudioWaitCard,
@@ -10,7 +10,7 @@ import { RecordingPanel } from './RecordingPanel';
 import { ReviewPanel } from './ReviewPanel';
 
 interface MediaStatusInlineProps {
-  flow: UseQuestionMediaFlowReturn;
+  flow: RecorderContextValue;
   /**
    * External flag — when `true`, overrides the phase and shows the
    * "submitting" spinner. Lets the screen own its own submit lifecycle
@@ -63,7 +63,7 @@ export const MediaStatusInline: React.FC<MediaStatusInlineProps> = ({
 
   switch (flow.phase) {
     case 'audio_wait':
-      return <AudioWaitCard secondsLeft={flow.secondsLeft} />;
+      return <AudioWaitCard />;
 
     case 'audio_playing':
       return (
@@ -78,7 +78,6 @@ export const MediaStatusInline: React.FC<MediaStatusInlineProps> = ({
     case 'prep_countdown':
       return (
         <PrepTimerCard
-          secondsLeft={flow.secondsLeft}
           onRecordNow={flow.startRecordingNow}
           label={labels?.prep}
           ctaLabel={labels?.recordNow}
@@ -88,7 +87,6 @@ export const MediaStatusInline: React.FC<MediaStatusInlineProps> = ({
     case 'recording':
       return (
         <RecordingPanel
-          secondsLeft={flow.secondsLeft}
           amplitude={flow.amplitude}
           onStop={flow.stopRecording}
           badgeLabel={labels?.recording}
@@ -114,3 +112,4 @@ export const MediaStatusInline: React.FC<MediaStatusInlineProps> = ({
       return null;
   }
 };
+

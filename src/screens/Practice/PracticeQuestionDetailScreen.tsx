@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -42,11 +42,10 @@ import {
   CaretDownIcon,
 } from '../../components/atoms/Icon';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
-import {
-  useAudioPlayer,
-  useQuestionMediaFlow,
-} from '../../hooks/practiceMedia';
-import { MediaStatusInline } from '../../components/practiceMedia';
+import { useAudioPlayer } from '../../hooks/practiceMedia';
+import { MediaConsole, MediaConsoleRef } from '../../components/practiceMedia';
+import { LocalErrorBoundary } from '../../components/organisms/LocalErrorBoundary';
+import { InteractionManager } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
 const scale = (size: number) => (screenWidth / 375) * size;
@@ -275,11 +274,37 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const [questionDetails, setQuestionDetails] = useState<QuestionDetails | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Question / sample audio UI affordances. Playback itself is owned by the
-  // `useQuestionMediaFlow` (question audio) and `samplePlayer` (sample audio)
-  // hooks below — these flags only drive the rate-picker dropdown.
-  const [selectedSpeed, setSelectedSpeed] = useState(1.0);
-  const [speedDropdownOpen, setSpeedDropdownOpen] = useState(false);
+  // Phased rendering states
+  const [renderPhase, setRenderPhase] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const mediaConsoleRef = useRef<MediaConsoleRef | null>(null);
+
+  // Local state for recording URI and duration (populated by MediaConsole)
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
+  const [recordingDurationSec, setRecordingDurationSec] = useState<number>(0);
+
+  const handleRecordedUriChange = useCallback((uri: string | null, durationSec: number) => {
+    setRecordedUri(uri);
+    setRecordingDurationSec(durationSec);
+  }, []);
+
+  // Set up phased rendering on mount and when question changes
+  useEffect(() => {
+    setRenderPhase(1);
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      setRenderPhase(2);
+      requestAnimationFrame(() => {
+        setRenderPhase(3);
+        setTimeout(() => {
+          setRenderPhase(4);
+          setTimeout(() => {
+            setRenderPhase(5);
+          }, 150);
+        }, 150);
+      });
+    });
+    return () => interaction.cancel();
+  }, [currentIndex]);
+
 
   // Bookmarking / coloured tagging.
   // `tagColor` controls the colour of the header tag icon. 'none' = untagged.
@@ -491,31 +516,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     [showToast],
   );
 
-  // ── Practice media state machine ────────────────────────────────────────
-  // Wraps the entire audio/recording lifecycle (pre-roll countdown → question
-  // audio → prep countdown → recording → review) behind a single hook. The
-  // screen only renders the inline status UI and submits the captured clip.
-  const mediaFlow = useQuestionMediaFlow({
-    metadata,
-    isCore,
-    audioUrl: questionAudioUrl,
-    // Don't auto-start until the question details have been fetched; otherwise
-    // we'd briefly enter a "no audio URL" fallback state before the audio
-    // arrives, then restart.
-    autoStart: !!questionDetails,
-    initialPlaybackRate: selectedSpeed,
-    onError: handleMediaError,
-  });
 
-  // Push playback-rate changes into the orchestrator so they take effect
-  // mid-playback (the question audio is the only thing rate-adjustable —
-  // sample audio uses its own player which stays at 1x). Depending on
-  // `mediaFlow` directly would re-fire every render (new object each
-  // render) — pulling the specific setter out makes the effect cheap.
-  const { setPlaybackRate } = mediaFlow;
-  useEffect(() => {
-    setPlaybackRate(selectedSpeed).catch(() => {});
-  }, [selectedSpeed, setPlaybackRate]);
 
   // Dedicated sample-answer audio player. Shares the global Sound coordinator
   // with the media-flow hook, so starting playback here automatically pauses
@@ -530,7 +531,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     setTranslationText(null);
     setScoreResult(null);
     setIsSubmitting(false);
-    await mediaFlow.reset();
+    await mediaConsoleRef.current?.reset();
     await samplePlayer.stop();
 
     try {
@@ -668,11 +669,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   // The "Me" tab is already populated by `fetchQuestionDetail` from the
   // single v1/question response, so we only need to fetch when the user
   // switches to the "Others" tab.
+  // We gate the fetch with renderPhase >= 5 to defer third-party requests.
   useEffect(() => {
-    if (currentQuestionId && activeHistoryTab === 'others') {
+    if (currentQuestionId && activeHistoryTab === 'others' && renderPhase >= 5) {
       fetchHistoryAttempts(currentQuestionId, activeHistoryTab);
     }
-  }, [currentQuestionId, activeHistoryTab, fetchHistoryAttempts]);
+  }, [currentQuestionId, activeHistoryTab, fetchHistoryAttempts, renderPhase]);
+
 
   // Load question on current index change. Cleanup is owned by the hooks
   // themselves (recorder + audio players auto-tear-down on unmount).
@@ -688,7 +691,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       return () => {
-        mediaFlow.reset().catch(() => {});
+        mediaConsoleRef.current?.reset().catch(() => {});
         samplePlayer.stop().catch(() => {});
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -697,7 +700,6 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
   // ── Submit Answer & Parse Scores ────────────────────────────────────────
   const submitAnswer = async () => {
-    const recordedUri = mediaFlow.recordedUri;
     if (!recordedUri) {
       showToast('Please record your voice first.', 'error');
       return;
@@ -718,7 +720,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       formData.append('device', 'mobile');
       formData.append('isPlatform', Platform.OS);
 
-      const recordDuration = mediaFlow.recordingDurationSec;
+      const recordDuration = recordingDurationSec;
       const m = Math.floor(recordDuration / 60);
       const s = Math.floor(recordDuration % 60);
       const durationStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
@@ -1063,7 +1065,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         </>
       )}
 
-      {loading ? (
+      {loading || renderPhase < 2 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
           <Text style={styles.loadingText}>Fetching question details...</Text>
@@ -1166,291 +1168,253 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               <Text style={styles.paragraphText}>{questionText}</Text>
             )}
 
-            {/* Audio question display (Repeat Sentence, Retell Lecture, ASQ) */}
-            {metadata.hasAudio && (
-              <View style={styles.audioDisplayContainer}>
-                <View style={styles.audioIconBadge}>
-                  <OpenBookIcon size={scale(24)} color="#007AFF" />
-                </View>
-                <Text style={styles.audioLabel}>Listen to the audio question</Text>
+            {/* Phase 3: Interactive Controls & Media Console */}
+            {renderPhase >= 3 ? (
+              <LocalErrorBoundary errorMessage="Failed to initialize audio console.">
+                <MediaConsole
+                  ref={mediaConsoleRef}
+                  metadata={metadata}
+                  isCore={isCore}
+                  questionAudioUrl={questionAudioUrl}
+                  questionDetailsLoaded={!!questionDetails}
+                  selectedMode={selectedMode}
+                  categoryId={categoryId}
+                  isSubmitting={isSubmitting}
+                  onRecordedUriChange={handleRecordedUriChange}
+                  onError={handleMediaError}
+                />
+              </LocalErrorBoundary>
+            ) : (
+              <View style={styles.consolePlaceholder}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.placeholderText}>Preparing audio controls...</Text>
+              </View>
+            )}
 
-                {mediaFlow.phase === 'audio_playing' ? (
-                  <View style={styles.playbackProgressRow}>
-                    <Text style={styles.progressTimeText}>{formatTime(mediaFlow.audioPositionMs / 1000)}</Text>
-                    <View style={styles.progressBarBg}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${mediaFlow.audioProgress * 100}%` },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.progressTimeText}>{formatTime(mediaFlow.audioDurationMs / 1000)}</Text>
-                  </View>
-                ) : (
+            {/* Phase 4: Action Buttons, Collapsible Panels, and Additional Details */}
+            {renderPhase >= 4 ? (
+              <>
+                {/* Action Buttons for Translate / Sample Response / Transcript */}
+                <View style={styles.cardActionsRow}>
+                  {metadata.hasAudio && (
+                    <TouchableOpacity
+                      style={[styles.outlineBtn, showTranscript && styles.outlineBtnActive]}
+                      onPress={() => setShowTranscript(!showTranscript)}
+                    >
+                      <Text style={[styles.outlineBtnText, showTranscript && styles.outlineBtnTextActive]}>Transcript</Text>
+                    </TouchableOpacity>
+                  )}
+
                   <TouchableOpacity
-                    style={styles.questionAudioPlayBtn}
-                    onPress={() => mediaFlow.replayAudio()}
-                    disabled={!questionAudioUrl}
+                    style={[styles.outlineBtn, styles.outlineBtnBlue, showTranslation && styles.outlineBtnBlueActive]}
+                    onPress={() => setShowTranslation(!showTranslation)}
                   >
-                    <PlayIcon size={scale(12)} color="#007AFF" />
-                    <Text style={styles.questionAudioPlayText}>Play Audio</Text>
+                    <TranslateIcon size={scale(14)} color={showTranslation ? '#FFFFFF' : '#007AFF'} />
+                    <Text style={[styles.outlineBtnText, styles.outlineBtnTextBlue, showTranslation && styles.outlineBtnTextActive]}>Translate</Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.outlineBtn, styles.outlineBtnPurple, showSampleResponse && styles.outlineBtnPurpleActive]}
+                    onPress={() => setShowSampleResponse(!showSampleResponse)}
+                  >
+                    <MessageBubbleIcon size={scale(14)} color={showSampleResponse ? '#FFFFFF' : '#7C3AED'} />
+                    <Text style={[styles.outlineBtnText, styles.outlineBtnTextPurple, showSampleResponse && styles.outlineBtnTextActive]}>Sample Response</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Collapsible Panels */}
+                {/* Transcript Panel */}
+                {showTranscript && metadata.hasAudio && (
+                  <View style={styles.inlineExpandPanel}>
+                    <Text style={styles.expandPanelTitle}>Transcript</Text>
+                    <Text style={styles.expandPanelText}>
+                      {questionDetails?.transcript ?? questionDetails?.q_transcript ?? questionText ?? 'No transcript available.'}
+                    </Text>
+                  </View>
                 )}
 
-                {/* Speed Controls Selector */}
-                <View style={styles.speedControlsWrapper}>
-                  <TouchableOpacity
-                    style={styles.speedSelectorBtn}
-                    onPress={() => setSpeedDropdownOpen(!speedDropdownOpen)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.speedSelectorText}>Speed: {selectedSpeed}x</Text>
-                    <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={speedDropdownOpen} />
-                  </TouchableOpacity>
-
-                  {speedDropdownOpen && (
-                    <View style={styles.speedDropdown}>
-                      {Data.audiovariableSpeed.map(speedItem => (
+                {/* Translation Panel */}
+                {showTranslation && (
+                  <View style={styles.inlineExpandPanel}>
+                    <View style={styles.langSelectorRowInline}>
+                      <Text style={styles.langLabelInline}>Translate to:</Text>
+                      <View style={styles.langPickerContainerInline}>
                         <TouchableOpacity
-                          key={speedItem.id}
-                          style={[styles.speedItem, selectedSpeed === speedItem.id && styles.speedItemActive]}
+                          style={styles.langPickerBtnInline}
+                          onPress={() => setLangDropdownOpen(!langDropdownOpen)}
+                        >
+                          <Text style={styles.langPickerTextInline}>
+                            {selectedLang === 'hi' ? 'Hindi' : selectedLang === 'es' ? 'Spanish' : selectedLang === 'zh' ? 'Chinese' : selectedLang === 'pa' ? 'Punjabi' : selectedLang === 'ne' ? 'Nepali' : 'Arabic'}
+                          </Text>
+                          <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={langDropdownOpen} />
+                        </TouchableOpacity>
+
+                        {langDropdownOpen && (
+                          <View style={styles.langDropdownInline}>
+                            {['hi', 'es', 'zh', 'pa', 'ne', 'ar'].map(lang => (
+                              <TouchableOpacity
+                                key={lang}
+                                style={styles.langItemInline}
+                                onPress={() => {
+                                  setSelectedLang(lang);
+                                  setLangDropdownOpen(false);
+                                }}
+                              >
+                                <Text style={styles.langItemTextInline}>
+                                  {lang === 'hi' ? 'Hindi' : lang === 'es' ? 'Spanish' : lang === 'zh' ? 'Chinese' : lang === 'pa' ? 'Punjabi' : lang === 'ne' ? 'Nepali' : 'Arabic'}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {translating ? (
+                      <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: scale(10) }} />
+                    ) : (
+                      <Text style={styles.expandPanelText}>
+                        {translationText ?? 'Translation text will appear here.'}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Sample Response Panel */}
+                {showSampleResponse && (
+                  <View style={styles.inlineExpandPanel}>
+                    <Text style={styles.expandPanelTitle}>Sample Answer</Text>
+                    <Text style={styles.expandPanelText}>
+                      {questionDetails?.sample_response ?? questionDetails?.answer ?? questionDetails?.model_answer ?? 'No sample answer text available.'}
+                    </Text>
+
+                    {(questionDetails?.sample_audio ?? questionDetails?.sample_audio_file ?? questionDetails?.answer_audio) && (
+                      <View style={styles.sampleAudioContainerInline}>
+                        <TouchableOpacity
+                          style={styles.samplePlayBtnInline}
                           onPress={() => {
-                            setSelectedSpeed(speedItem.id);
-                            setSpeedDropdownOpen(false);
+                            if (samplePlayer.isPlaying) {
+                              samplePlayer.stop();
+                              return;
+                            }
+                            const url = resolveAudioUrl(
+                              questionDetails.sample_audio ??
+                                questionDetails.sample_audio_file ??
+                                questionDetails.answer_audio,
+                            );
+                            if (url) samplePlayer.play(url);
                           }}
                         >
-                          <Text style={[styles.speedItemText, selectedSpeed === speedItem.id && styles.speedItemTextActive]}>
-                            {speedItem.name}
+                          {samplePlayer.isPlaying ? (
+                            <Svg width={scale(10)} height={scale(10)} viewBox="0 0 24 24" fill="none">
+                              <Rect x="6" y="4" width="4" height="16" rx="1" fill="#FFFFFF" />
+                              <Rect x="14" y="4" width="4" height="16" rx="1" fill="#FFFFFF" />
+                            </Svg>
+                          ) : (
+                            <Svg width={scale(10)} height={scale(10)} viewBox="0 0 24 24" fill="#FFFFFF">
+                              <Path d="M8 5v14l11-7z" fill="#FFFFFF" />
+                            </Svg>
+                          )}
+                          <Text style={styles.samplePlayBtnTextInline}>
+                            {samplePlayer.isPlaying ? 'Stop' : 'Play Sample Audio'}
                           </Text>
                         </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
 
-            {/* Integrated Status / Controls (Prep / Recording / Review) */}
-            <View style={styles.statusSectionDivider} />
-
-            {/* Phase-driven media UI — pre-roll, audio playing, prep timer,
-                live recording, review/playback, or submitting spinner. */}
-            <MediaStatusInline flow={mediaFlow} isSubmitting={isSubmitting} />
-
-            {/* Action Buttons for Translate / Sample Response / Transcript */}
-            <View style={styles.cardActionsRow}>
-              {metadata.hasAudio && (
-                <TouchableOpacity
-                  style={[styles.outlineBtn, showTranscript && styles.outlineBtnActive]}
-                  onPress={() => setShowTranscript(!showTranscript)}
-                >
-                  <Text style={[styles.outlineBtnText, showTranscript && styles.outlineBtnTextActive]}>Transcript</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[styles.outlineBtn, styles.outlineBtnBlue, showTranslation && styles.outlineBtnBlueActive]}
-                onPress={() => setShowTranslation(!showTranslation)}
-              >
-                <TranslateIcon size={scale(14)} color={showTranslation ? '#FFFFFF' : '#007AFF'} />
-                <Text style={[styles.outlineBtnText, styles.outlineBtnTextBlue, showTranslation && styles.outlineBtnTextActive]}>Translate</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.outlineBtn, styles.outlineBtnPurple, showSampleResponse && styles.outlineBtnPurpleActive]}
-                onPress={() => setShowSampleResponse(!showSampleResponse)}
-              >
-                <MessageBubbleIcon size={scale(14)} color={showSampleResponse ? '#FFFFFF' : '#7C3AED'} />
-                <Text style={[styles.outlineBtnText, styles.outlineBtnTextPurple, showSampleResponse && styles.outlineBtnTextActive]}>Sample Response</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Collapsible Panels */}
-            {/* Transcript Panel */}
-            {showTranscript && metadata.hasAudio && (
-              <View style={styles.inlineExpandPanel}>
-                <Text style={styles.expandPanelTitle}>Transcript</Text>
-                <Text style={styles.expandPanelText}>
-                  {questionDetails?.transcript ?? questionDetails?.q_transcript ?? questionText ?? 'No transcript available.'}
-                </Text>
-              </View>
-            )}
-
-            {/* Translation Panel */}
-            {showTranslation && (
-              <View style={styles.inlineExpandPanel}>
-                <View style={styles.langSelectorRowInline}>
-                  <Text style={styles.langLabelInline}>Translate to:</Text>
-                  <View style={styles.langPickerContainerInline}>
-                    <TouchableOpacity
-                      style={styles.langPickerBtnInline}
-                      onPress={() => setLangDropdownOpen(!langDropdownOpen)}
-                    >
-                      <Text style={styles.langPickerTextInline}>
-                        {selectedLang === 'hi' ? 'Hindi' : selectedLang === 'es' ? 'Spanish' : selectedLang === 'zh' ? 'Chinese' : selectedLang === 'pa' ? 'Punjabi' : selectedLang === 'ne' ? 'Nepali' : 'Arabic'}
-                      </Text>
-                      <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={langDropdownOpen} />
-                    </TouchableOpacity>
-
-                    {langDropdownOpen && (
-                      <View style={styles.langDropdownInline}>
-                        {['hi', 'es', 'zh', 'pa', 'ne', 'ar'].map(lang => (
-                          <TouchableOpacity
-                            key={lang}
-                            style={styles.langItemInline}
-                            onPress={() => {
-                              setSelectedLang(lang);
-                              setLangDropdownOpen(false);
-                            }}
-                          >
-                            <Text style={styles.langItemTextInline}>
-                              {lang === 'hi' ? 'Hindi' : lang === 'es' ? 'Spanish' : lang === 'zh' ? 'Chinese' : lang === 'pa' ? 'Punjabi' : lang === 'ne' ? 'Nepali' : 'Arabic'}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
+                        {samplePlayer.isPlaying && (
+                          <Text style={styles.sampleTimerTextInline}>
+                            {formatTime(samplePlayer.positionMs / 1000)} /{' '}
+                            {formatTime(samplePlayer.durationMs / 1000)}
+                          </Text>
+                        )}
                       </View>
                     )}
                   </View>
+                )}
+
+                {/* Card Footer Divider */}
+                <View style={styles.cardFooterDivider} />
+
+                {/* Card Footer Row */}
+                <View style={styles.cardFooterRow}>
+                  <Text style={styles.attemptCountText}>{attempts.length} X ATTEMPTED</Text>
+                  <TouchableOpacity style={styles.reportBtn}>
+                    <ReportFlagIcon size={scale(14)} color="#8E8E93" />
+                  </TouchableOpacity>
                 </View>
-
-                {translating ? (
-                  <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: scale(10) }} />
-                ) : (
-                  <Text style={styles.expandPanelText}>
-                    {translationText ?? 'Translation text will appear here.'}
-                  </Text>
-                )}
+              </>
+            ) : (
+              <View style={styles.consolePlaceholder}>
+                <Text style={styles.placeholderText}>Loading collateral tools...</Text>
               </View>
             )}
-
-            {/* Sample Response Panel */}
-            {showSampleResponse && (
-              <View style={styles.inlineExpandPanel}>
-                <Text style={styles.expandPanelTitle}>Sample Answer</Text>
-                <Text style={styles.expandPanelText}>
-                  {questionDetails?.sample_response ?? questionDetails?.answer ?? questionDetails?.model_answer ?? 'No sample answer text available.'}
-                </Text>
-
-                {(questionDetails?.sample_audio ?? questionDetails?.sample_audio_file ?? questionDetails?.answer_audio) && (
-                  <View style={styles.sampleAudioContainerInline}>
-                    <TouchableOpacity
-                      style={styles.samplePlayBtnInline}
-                      onPress={() => {
-                        if (samplePlayer.isPlaying) {
-                          samplePlayer.stop();
-                          return;
-                        }
-                        const url = resolveAudioUrl(
-                          questionDetails.sample_audio ??
-                            questionDetails.sample_audio_file ??
-                            questionDetails.answer_audio,
-                        );
-                        if (url) samplePlayer.play(url);
-                      }}
-                    >
-                      {samplePlayer.isPlaying ? (
-                        <Svg width={scale(10)} height={scale(10)} viewBox="0 0 24 24" fill="none">
-                          <Rect x="6" y="4" width="4" height="16" rx="1" fill="#FFFFFF" />
-                          <Rect x="14" y="4" width="4" height="16" rx="1" fill="#FFFFFF" />
-                        </Svg>
-                      ) : (
-                        <Svg width={scale(10)} height={scale(10)} viewBox="0 0 24 24" fill="#FFFFFF">
-                          <Path d="M8 5v14l11-7z" fill="#FFFFFF" />
-                        </Svg>
-                      )}
-                      <Text style={styles.samplePlayBtnTextInline}>
-                        {samplePlayer.isPlaying ? 'Stop' : 'Play Sample Audio'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {samplePlayer.isPlaying && (
-                      <Text style={styles.sampleTimerTextInline}>
-                        {formatTime(samplePlayer.positionMs / 1000)} /{' '}
-                        {formatTime(samplePlayer.durationMs / 1000)}
-                      </Text>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Card Footer Divider */}
-            <View style={styles.cardFooterDivider} />
-
-            {/* Card Footer Row */}
-            <View style={styles.cardFooterRow}>
-              <Text style={styles.attemptCountText}>{attempts.length} X ATTEMPTED</Text>
-              <TouchableOpacity style={styles.reportBtn}>
-                <ReportFlagIcon size={scale(14)} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
           </View>
 
           {/* ── Tab Logs Section ── */}
-          <View style={styles.logsSection}>
-            {/* Me vs Others Switch */}
-            <View style={styles.logsTabSwitcher}>
-              <TouchableOpacity
-                style={[styles.logsTabBtn, activeHistoryTab === 'me' && styles.logsTabBtnActive]}
-                onPress={() => setActiveHistoryTab('me')}
-              >
-                <Text style={[styles.logsTabText, activeHistoryTab === 'me' && styles.logsTabTextActive]}>Me</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.logsTabBtn, activeHistoryTab === 'others' && styles.logsTabBtnActive]}
-                onPress={() => setActiveHistoryTab('others')}
-              >
-                <Text style={[styles.logsTabText, activeHistoryTab === 'others' && styles.logsTabTextActive]}>Others</Text>
-              </TouchableOpacity>
-            </View>
+          {renderPhase >= 4 && (
+            <View style={styles.logsSection}>
+              {/* Me vs Others Switch */}
+              <View style={styles.logsTabSwitcher}>
+                <TouchableOpacity
+                  style={[styles.logsTabBtn, activeHistoryTab === 'me' && styles.logsTabBtnActive]}
+                  onPress={() => setActiveHistoryTab('me')}
+                >
+                  <Text style={[styles.logsTabText, activeHistoryTab === 'me' && styles.logsTabTextActive]}>Me</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.logsTabBtn, activeHistoryTab === 'others' && styles.logsTabBtnActive]}
+                  onPress={() => setActiveHistoryTab('others')}
+                >
+                  <Text style={[styles.logsTabText, activeHistoryTab === 'others' && styles.logsTabTextActive]}>Others</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* Sort / Filter Dropdown */}
-            <View style={styles.filterWrapper}>
-              <TouchableOpacity
-                style={styles.filterDropdownHeader}
-                onPress={() => setFilterDropdownOpen(!filterDropdownOpen)}
-              >
-                <Text style={styles.filterDropdownLabel}>Sort / Filter: <Text style={styles.filterDropdownValue}>{selectedFilter}</Text></Text>
-                <CaretDownIcon size={scale(12)} color="#1C1C1E" expanded={filterDropdownOpen} />
-              </TouchableOpacity>
+              {/* Sort / Filter Dropdown */}
+              <View style={styles.filterWrapper}>
+                <TouchableOpacity
+                  style={styles.filterDropdownHeader}
+                  onPress={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                >
+                  <Text style={styles.filterDropdownLabel}>Sort / Filter: <Text style={styles.filterDropdownValue}>{selectedFilter}</Text></Text>
+                  <CaretDownIcon size={scale(12)} color="#1C1C1E" expanded={filterDropdownOpen} />
+                </TouchableOpacity>
 
-              {filterDropdownOpen && (
-                <View style={styles.filterDropdownList}>
-                  {['Latest', 'Highest Score', 'Lowest Score'].map(filterItem => (
-                    <TouchableOpacity
-                      key={filterItem}
-                      style={[styles.filterDropdownItem, selectedFilter === filterItem && styles.filterDropdownItemActive]}
-                      onPress={() => {
-                        setSelectedFilter(filterItem as any);
-                        setFilterDropdownOpen(false);
-                      }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, selectedFilter === filterItem && styles.filterDropdownItemTextActive]}>
-                        {filterItem}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                {filterDropdownOpen && (
+                  <View style={styles.filterDropdownList}>
+                    {['Latest', 'Highest Score', 'Lowest Score'].map(filterItem => (
+                      <TouchableOpacity
+                        key={filterItem}
+                        style={[styles.filterDropdownItem, selectedFilter === filterItem && styles.filterDropdownItemActive]}
+                        onPress={() => {
+                          setSelectedFilter(filterItem as any);
+                          setFilterDropdownOpen(false);
+                        }}
+                      >
+                        <Text style={[styles.filterDropdownItemText, selectedFilter === filterItem && styles.filterDropdownItemTextActive]}>
+                          {filterItem}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Attempt Logs list — items are memoized above so a recorder
+                  tick (which re-renders the whole screen every second) does
+                  NOT pay the cost of diffing 100+ attempt rows. */}
+              {loadingAttempts ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#007AFF"
+                  style={{ marginVertical: scale(20) }}
+                />
+              ) : (
+                <MemoizedAttemptsList
+                  attempts={activeHistoryTab === 'me' ? sortedAttempts : sortedOthersAttempts}
+                  isOthers={activeHistoryTab === 'others'}
+                />
               )}
             </View>
-
-            {/* Attempt Logs list — items are memoized above so a recorder
-                tick (which re-renders the whole screen every second) does
-                NOT pay the cost of diffing 100+ attempt rows. */}
-            {loadingAttempts ? (
-              <ActivityIndicator
-                size="small"
-                color="#007AFF"
-                style={{ marginVertical: scale(20) }}
-              />
-            ) : (
-              <MemoizedAttemptsList
-                attempts={activeHistoryTab === 'me' ? sortedAttempts : sortedOthersAttempts}
-                isOthers={activeHistoryTab === 'others'}
-              />
-            )}
-          </View>
+          )}
         </ScrollView>
       )}
 
@@ -1468,10 +1432,10 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.navFooterSubmitBtn,
-            (!mediaFlow.recordedUri || isSubmitting) && styles.navFooterSubmitBtnDisabled
+            (!recordedUri || isSubmitting) && styles.navFooterSubmitBtnDisabled
           ]}
           onPress={submitAnswer}
-          disabled={!mediaFlow.recordedUri || isSubmitting}
+          disabled={!recordedUri || isSubmitting}
         >
           <Text style={styles.navFooterSubmitText}>
             {isSubmitting ? 'Submitting...' : 'Submit'}
@@ -1690,6 +1654,13 @@ const AttemptItem = React.memo(({ attempt, isOthers }: { attempt: any; isOthers?
 });
 
 const MemoizedAttemptsList = React.memo(({ attempts, isOthers }: MemoizedAttemptsListProps) => {
+  const [limit, setLimit] = useState(10);
+
+  // Reset limit when attempts change (e.g., switching questions or tabs)
+  useEffect(() => {
+    setLimit(10);
+  }, [attempts]);
+
   if (attempts.length === 0) {
     return (
       <Text style={styles.noAttemptsText}>
@@ -1698,18 +1669,31 @@ const MemoizedAttemptsList = React.memo(({ attempts, isOthers }: MemoizedAttempt
     );
   }
 
+  const visibleAttempts = attempts.slice(0, limit);
+
   return (
     <>
-      {attempts.map((attempt, index) => (
+      {visibleAttempts.map((attempt, index) => (
         <AttemptItem
           key={attempt.id ?? index}
           attempt={attempt}
           isOthers={isOthers}
         />
       ))}
+      {attempts.length > limit && (
+        <TouchableOpacity
+          style={styles.loadMoreAttemptsBtn}
+          onPress={() => setLimit(prev => prev + 20)}
+        >
+          <Text style={styles.loadMoreAttemptsText}>
+            Show More Attempts ({attempts.length - limit} remaining)
+          </Text>
+        </TouchableOpacity>
+      )}
     </>
   );
 });
+
 
 const styles = StyleSheet.create({
   container: {
@@ -2665,6 +2649,36 @@ const styles = StyleSheet.create({
     fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Bold',
     fontWeight: 'bold',
+  },
+  consolePlaceholder: {
+    padding: scale(16),
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: scale(12),
+    width: '100%',
+  },
+  placeholderText: {
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#8E8E93',
+    marginTop: scale(6),
+  },
+  loadMoreAttemptsBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: scale(10),
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: scale(8),
+    marginTop: scale(10),
+    marginBottom: scale(20),
+  },
+  loadMoreAttemptsText: {
+    fontSize: scale(11),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#007AFF',
   },
 });
 

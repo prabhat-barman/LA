@@ -2,6 +2,20 @@
 
 export type TagColor = 'none' | 'grey' | 'red' | 'green' | 'yellow';
 
+/**
+ * Per-question voice variant returned by the list endpoint as
+ * `question_audios[]`. `label` is the display name (e.g. "Lily") and
+ * `value` is the storage path of the corresponding mp3. Only the voices
+ * present in this array are actually playable for the question — the
+ * top-level `voices` array on the API response is the global catalogue
+ * and may include voices that have not yet been recorded for this item.
+ */
+export interface QuestionAudioVariant {
+  label: string;
+  value: string;
+  question_id?: number | string;
+}
+
 export interface QuestionDetails {
   id: string | number;
   title?: string;
@@ -20,6 +34,7 @@ export interface QuestionDetails {
   q_image?: string;
   question_image?: string;
   image_file?: string;
+  image_link?: string;
   sample_response?: string;
   answer?: string;
   model_answer?: string;
@@ -35,6 +50,7 @@ export interface QuestionDetails {
   audio_script?: string;
   script?: string;
   media_link?: string;
+  question_audios?: QuestionAudioVariant[];
 }
 
 export interface AttemptLog {

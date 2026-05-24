@@ -34,15 +34,10 @@ const BAR_PATTERN = [
   20, 24, 18, 12, 16, 10, 8, 6, 4, 4,
 ];
 
-// Cosmetic voice list. The codebase doesn't yet wire a TTS / voice
-// selection backend — this dropdown is here for design parity and so the
-// UI is ready when the API lands. Changing the value is a no-op today.
-const VOICE_OPTIONS = [
-  { id: 'william', name: 'William' },
-  { id: 'olivia', name: 'Olivia' },
-  { id: 'james', name: 'James' },
-  { id: 'sophia', name: 'Sophia' },
-];
+// The voice list is now driven by the API's per-question `question_audios`
+// array (see `availableVoices` prop). The dropdown is rendered only when
+// the question has more than one variant — otherwise there's nothing to
+// switch between.
 
 // ─── Status pill ──────────────────────────────────────────────────────────
 // Coloured dot + label used at the top-right of each card to mirror the
@@ -492,24 +487,43 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
 };
 
 // ─── Speed + Voice controls row ──────────────────────────────────────────
+interface VoiceVariant {
+  label: string;
+  value: string;
+}
+
 interface SpeedVoiceRowProps {
   selectedSpeed: number;
   onSelectSpeed: (speed: number) => void;
-  selectedVoiceId: string;
-  onSelectVoice: (id: string) => void;
+  /**
+   * Voices the API has actually published audio for on the current
+   * question. The dropdown only renders if this contains 2+ entries —
+   * a single-variant question has nothing to switch between.
+   */
+  availableVoices: VoiceVariant[];
+  selectedVoiceLabel: string | null;
+  onSelectVoice: (label: string) => void;
 }
 
 const SpeedVoiceRow: React.FC<SpeedVoiceRowProps> = ({
   selectedSpeed,
   onSelectSpeed,
-  selectedVoiceId,
+  availableVoices,
+  selectedVoiceLabel,
   onSelectVoice,
 }) => {
   const [speedOpen, setSpeedOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
 
-  const selectedVoiceName =
-    VOICE_OPTIONS.find(v => v.id === selectedVoiceId)?.name || 'Default';
+  // Show the voice dropdown only when there's an actual choice to make.
+  // Some question types (and many older questions) ship with a single
+  // recorded variant — surfacing a 1-item dropdown would be noise.
+  const showVoice = availableVoices.length > 1;
+
+  const displayVoiceLabel =
+    (selectedVoiceLabel && availableVoices.find(v => v.label === selectedVoiceLabel)?.label) ||
+    availableVoices[0]?.label ||
+    'Default';
 
   return (
     <View style={styles.controlsRow}>
@@ -556,48 +570,50 @@ const SpeedVoiceRow: React.FC<SpeedVoiceRowProps> = ({
         </View>
       </View>
 
-      <View style={[styles.controlGroup, { alignItems: 'flex-end' }]}>
-        <Text style={styles.controlLabel}>Voice</Text>
-        <View style={{ zIndex: 20 }}>
-          <TouchableOpacity
-            style={styles.dropdownBtn}
-            onPress={() => {
-              setVoiceOpen(o => !o);
-              setSpeedOpen(false);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dropdownBtnText}>{selectedVoiceName}</Text>
-            <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={voiceOpen} />
-          </TouchableOpacity>
-          {voiceOpen && (
-            <View style={[styles.dropdownPanel, styles.dropdownPanelRight]}>
-              {VOICE_OPTIONS.map(v => (
-                <TouchableOpacity
-                  key={v.id}
-                  style={[
-                    styles.dropdownItem,
-                    selectedVoiceId === v.id && styles.dropdownItemActive,
-                  ]}
-                  onPress={() => {
-                    onSelectVoice(v.id);
-                    setVoiceOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      selectedVoiceId === v.id && styles.dropdownItemTextActive,
-                    ]}
-                  >
-                    {v.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+      {showVoice && (
+        <View style={[styles.controlGroup, { alignItems: 'flex-end' }]}>
+          <Text style={styles.controlLabel}>Voice</Text>
+          <View style={{ zIndex: 20 }}>
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={() => {
+                setVoiceOpen(o => !o);
+                setSpeedOpen(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownBtnText}>{displayVoiceLabel}</Text>
+              <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={voiceOpen} />
+            </TouchableOpacity>
+            {voiceOpen && (
+              <View style={[styles.dropdownPanel, styles.dropdownPanelRight]}>
+                {availableVoices.map(v => {
+                  const active = selectedVoiceLabel === v.label;
+                  return (
+                    <TouchableOpacity
+                      key={v.label}
+                      style={[styles.dropdownItem, active && styles.dropdownItemActive]}
+                      onPress={() => {
+                        onSelectVoice(v.label);
+                        setVoiceOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          active && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {v.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 };
@@ -612,8 +628,14 @@ interface UnifiedMediaBarProps {
   isSubmitting?: boolean;
   selectedSpeed: number;
   onSelectSpeed: (s: number) => void;
-  selectedVoiceId: string;
-  onSelectVoice: (id: string) => void;
+  /**
+   * Voice variants attached to the current question (driven by the API's
+   * `question_audios[]` list). Pass `[]` if the question has no variants;
+   * the dropdown only renders when there's more than one option.
+   */
+  availableVoices: VoiceVariant[];
+  selectedVoiceLabel: string | null;
+  onSelectVoice: (label: string) => void;
 }
 
 /**
@@ -637,7 +659,8 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
   isSubmitting = false,
   selectedSpeed,
   onSelectSpeed,
-  selectedVoiceId,
+  availableVoices,
+  selectedVoiceLabel,
   onSelectVoice,
 }) => {
   const flow = useRecorder();
@@ -706,7 +729,8 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
         <SpeedVoiceRow
           selectedSpeed={selectedSpeed}
           onSelectSpeed={onSelectSpeed}
-          selectedVoiceId={selectedVoiceId}
+          availableVoices={availableVoices}
+          selectedVoiceLabel={selectedVoiceLabel}
           onSelectVoice={onSelectVoice}
         />
       )}

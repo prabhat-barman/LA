@@ -101,6 +101,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const [questionDetails, setQuestionDetails] = useState<QuestionDetails | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // The voice currently selected by the user for the question audio.
+  // Resolved against `questionDetails.question_audios[*].label`. `null`
+  // means "use the first available voice or fall back to legacy fields".
+  // We reset this whenever the question changes so each question opens
+  // with its own default voice rather than carrying a stale selection.
+  const [selectedVoiceLabel, setSelectedVoiceLabel] = useState<string | null>(null);
+
   const renderPhase = usePhasedRender(currentIndex);
   const mediaConsoleRef = useRef<MediaConsoleRef | null>(null);
 
@@ -241,8 +248,21 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const resolveImageUrl = useCallback(
     (img: string | undefined) => {
       if (!img) return '';
+      // Already absolute (http(s) URL) or a data URI — pass through.
       if (img.startsWith('http://') || img.startsWith('https://')) return img;
+      if (img.startsWith('data:')) return img;
       const cleaned = img.startsWith('/') ? img.substring(1) : img;
+      // Media assets (Describe Image PNG/JPGs, audio takes, etc.) live on
+      // the shared S3 bucket. The legacy `pdfPath` host only serves a few
+      // older endpoints, so paths that start with the well-known media
+      // prefixes must be routed through `mediaUrl` to actually resolve.
+      if (
+        cleaned.startsWith('ptedata/') ||
+        cleaned.startsWith('question_audio_tests/') ||
+        cleaned.startsWith('audio_tests/')
+      ) {
+        return `${Config.mediaUrl}/${cleaned}`;
+      }
       const basePath = isCore ? Config.pdfPteCorePath : Config.pdfPath;
       return `${basePath}${cleaned}`;
     },
@@ -260,10 +280,45 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     );
   }, [questionDetails]);
 
-  // Resolved question audio URL (for the media flow hook). Only valid once
-  // questionDetails has loaded.
+  // Voice variants attached to this question (e.g. Lily / Clara / William
+  // mp3 takes). The dropdown only ever shows entries from this list because
+  // the global `voices` catalogue may include voices that haven't been
+  // recorded for the current item. `value` is the storage path; `label`
+  // is the display name shown in the dropdown.
+  const availableVoices = useMemo(() => {
+    const list = questionDetails?.question_audios;
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter(
+        (v): v is { label: string; value: string } =>
+          !!v && typeof v.label === 'string' && typeof v.value === 'string' && v.value.length > 0,
+      )
+      .map(v => ({ label: v.label, value: v.value }));
+  }, [questionDetails]);
+
+  // Default the voice picker once the variants for the new question land.
+  // We don't preserve the previous selection across questions because the
+  // available voices vary per item — a voice that worked for question A
+  // might not exist for question B.
+  useEffect(() => {
+    if (selectedVoiceLabel) return;
+    if (availableVoices.length === 0) return;
+    setSelectedVoiceLabel(availableVoices[0].label);
+  }, [availableVoices, selectedVoiceLabel]);
+
+  // Resolved question audio URL (for the media flow hook). Prefers the
+  // voice variant matching `selectedVoiceLabel` and falls back through the
+  // legacy single-audio fields for question types that don't yet emit a
+  // `question_audios` array. Only valid once questionDetails has loaded.
   const questionAudioUrl = useMemo(() => {
     if (!questionDetails) return undefined;
+    if (selectedVoiceLabel && availableVoices.length > 0) {
+      const match = availableVoices.find(v => v.label === selectedVoiceLabel);
+      if (match?.value) return resolveAudioUrl(match.value);
+    }
+    if (availableVoices.length > 0) {
+      return resolveAudioUrl(availableVoices[0].value);
+    }
     const audioFile =
       questionDetails.audio ??
       questionDetails.audio_file ??
@@ -271,7 +326,11 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       questionDetails.q_audio ??
       questionDetails.media_link;
     return audioFile ? resolveAudioUrl(audioFile) : undefined;
-  }, [questionDetails, resolveAudioUrl]);
+  }, [questionDetails, selectedVoiceLabel, availableVoices, resolveAudioUrl]);
+
+  const handleSelectVoice = useCallback((label: string) => {
+    setSelectedVoiceLabel(label);
+  }, []);
 
   // Mic permission helper. Prompts the user with a Settings shortcut when
   // the OS reports that mic access is permanently denied.
@@ -334,6 +393,10 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       setIsSubmitting(false);
       setAttempts([]);
       setOthersAttempts([]);
+      // Drop any voice selection from the previous question — the
+      // `availableVoices` effect will pick the new question's default once
+      // the response lands.
+      setSelectedVoiceLabel(null);
       attemptAudio.stop();
       await mediaConsoleRef.current?.reset();
       await samplePlayer.stop();
@@ -817,6 +880,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   selectedMode={selectedMode}
                   categoryId={categoryId}
                   isSubmitting={isSubmitting}
+                  availableVoices={availableVoices}
+                  selectedVoiceLabel={selectedVoiceLabel}
+                  onSelectVoice={handleSelectVoice}
                   onRecordedUriChange={handleRecordedUriChange}
                   onError={handleMediaError}
                 />

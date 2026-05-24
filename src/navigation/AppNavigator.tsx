@@ -31,6 +31,7 @@ import { PracticeQuestionDetailScreen } from '../screens/Practice/PracticeQuesti
 import { PdfListScreen } from '../screens/Menu/PdfListScreen';
 import { MicrophoneSetupScreen } from '../screens/Microphone/MicrophoneSetupScreen';
 import { LiveSessionsScreen } from '../screens/LiveSessions/LiveSessionsScreen';
+import { AudioModuleScreen } from '../modules/audio';
 import { MonthlyPredictionScreen } from '../screens/MonthlyPrediction/MonthlyPredictionScreen';
 import { DailyFeedbackListScreen } from '../screens/DailyFeedback/DailyFeedbackListScreen';
 import { DailyFeedbackDetailScreen } from '../screens/DailyFeedback/DailyFeedbackDetailScreen';
@@ -83,6 +84,7 @@ export type RootStackParamList = {
   };
   MicrophoneSetup: undefined;
   LiveSessions: undefined;
+  AudioModuleDemo: undefined;
   MonthlyPrediction: undefined;
   DailyFeedback: undefined;
   DailyFeedbackDetail: {
@@ -140,6 +142,7 @@ const AppNavigator = () => {
         <Stack.Screen name="PdfList" component={PdfListScreen} />
         <Stack.Screen name="MicrophoneSetup" component={MicrophoneSetupScreen} />
         <Stack.Screen name="LiveSessions" component={LiveSessionsScreen} />
+        <Stack.Screen name="AudioModuleDemo" component={AudioModuleScreen} />
         <Stack.Screen name="MonthlyPrediction" component={MonthlyPredictionScreen} />
         <Stack.Screen name="DailyFeedback" component={DailyFeedbackListScreen} />
         <Stack.Screen name="DailyFeedbackDetail" component={DailyFeedbackDetailScreen} />

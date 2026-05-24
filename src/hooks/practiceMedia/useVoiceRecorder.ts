@@ -245,17 +245,18 @@ export const useVoiceRecorder = (
    */
   const stopRequestedRef = useRef(false);
 
-  // Keep latest callbacks without retriggering effects.
+  // Keep latest callbacks/values updated synchronously during render
   const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
+
   const onTickRef = useRef(onTick);
+  onTickRef.current = onTick;
+
   const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   const maxDurationSecRef = useRef(maxDurationSec);
-  useEffect(() => {
-    onFinishRef.current = onFinish;
-    onTickRef.current = onTick;
-    onErrorRef.current = onError;
-    maxDurationSecRef.current = maxDurationSec;
-  }, [onFinish, onTick, onError, maxDurationSec]);
+  maxDurationSecRef.current = maxDurationSec;
 
   const clearTick = useCallback(() => {
     if (tickIntervalRef.current) {

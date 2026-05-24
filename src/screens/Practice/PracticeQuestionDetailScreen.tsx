@@ -150,6 +150,7 @@ interface QuestionDetails {
   q_translation?: string;
   audio_script?: string;
   script?: string;
+  media_link?: string;
 }
 
 interface AttemptLog {
@@ -697,6 +698,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       return audio;
     }
     const cleaned = audio.startsWith('/') ? audio.substring(1) : audio;
+    if (cleaned.startsWith('question_audio_tests/') || cleaned.startsWith('audio_tests/')) {
+      return `${Config.mediaUrl}/${cleaned}`;
+    }
     return `${Config.audioPath}${cleaned}`;
   }, []);
 
@@ -734,7 +738,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       questionDetails.audio ??
       questionDetails.audio_file ??
       questionDetails.question_audio ??
-      questionDetails.q_audio;
+      questionDetails.q_audio ??
+      questionDetails.media_link;
     return audioFile ? resolveAudioUrl(audioFile) : undefined;
   }, [questionDetails, resolveAudioUrl]);
 

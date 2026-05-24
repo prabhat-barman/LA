@@ -56,6 +56,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [recordingDurationSec, setRecordingDurationSec] = useState<number>(0);
   const [resolvedPrepTimeSec, setResolvedPrepTimeSec] = useState<number>(35);
+  const [maxDurationSec, setMaxDurationSec] = useState<number | undefined>(undefined);
 
   const phaseRef = useRef<MediaPhase>('idle');
   phaseRef.current = phase;
@@ -160,7 +161,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   const recorder = useVoiceRecorder({
-    maxDurationSec: metadataRef.current?.recordingDuration,
+    maxDurationSec: maxDurationSec,
     onFinish: (uri, elapsedSec) => {
       clearCountdown();
       setPhase('review');
@@ -328,6 +329,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     recorder.reset().catch(() => {});
 
     metadataRef.current = params.metadata;
+    setMaxDurationSec(params.metadata.recordingDuration);
     isCoreRef.current = !!params.isCore;
     audioUrlRef.current = params.audioUrl;
     onAudioFinishRef.current = params.onAudioFinish;

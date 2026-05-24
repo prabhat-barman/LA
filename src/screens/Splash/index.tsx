@@ -16,12 +16,13 @@ const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
+    // Native bootsplash already handles the visual splash via
+    // react-native-bootsplash, so this screen is essentially a route
+    // gate that decides where to send the user. We avoid any artificial
+    // delay so cold-start feels instant once the bundle is loaded.
     const checkSessionAndNavigate = async () => {
       try {
         const userToken = await getItem('user_token');
-        // Small delay to let splash animation settle
-        await new Promise((resolve) => setTimeout(() => resolve(null), 2000));
-        
         if (userToken) {
           navigation.replace('Dashboard');
         } else {

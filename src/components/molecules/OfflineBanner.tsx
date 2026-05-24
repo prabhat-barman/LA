@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 interface OfflineBannerProps {
@@ -11,23 +12,39 @@ interface OfflineBannerProps {
 // Shows a thin amber banner whenever NetInfo reports the device is
 // offline. Mounted near the navigation root so every screen gets it
 // without per-screen wiring.
+//
+// We pad with the top safe-area inset so the banner sits below the
+// system status bar — otherwise on Android screens that use
+// `StatusBar translucent` (like Onboarding) the banner would render
+// directly over the system clock and icons.
 export const OfflineBanner: React.FC<OfflineBannerProps> = ({
   message = "You're offline — showing cached content where available.",
 }) => {
   const { isConnected, isInternetReachable } = useNetworkStatus();
+  const insets = useSafeAreaInsets();
 
   // Treat both "no connection" and "connected but no internet"
   // (captive portal / DNS failure) as offline for UX purposes.
   const offline = !isConnected || isInternetReachable === false;
   if (!offline) return null;
 
+  // On Android, `StatusBar.currentHeight` is the most reliable fallback
+  // for screens that don't sit inside a SafeAreaProvider boundary; on
+  // iOS, the safe-area inset is always populated.
+  const topInset =
+    insets.top > 0
+      ? insets.top
+      : Platform.OS === 'android'
+      ? StatusBar.currentHeight ?? 0
+      : 0;
+
   return (
     <View
-      style={styles.container}
+      style={[styles.container, { paddingTop: topInset + 6 }]}
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
     >
-      <Text style={styles.text} accessibilityLabel={message}>
+      <Text style={styles.text} accessibilityLabel={message} numberOfLines={2}>
         {message}
       </Text>
     </View>
@@ -37,7 +54,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#FEF3C7',
-    paddingVertical: 6,
+    paddingBottom: 6,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#FDE68A',

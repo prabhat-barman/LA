@@ -76,43 +76,11 @@ const AttemptItem = React.memo(
     const hasAudioFile = Boolean(audioFile);
     const handlePlay = () => onToggleAudio?.(attempt);
 
-    if (isOthers) {
-      const attemptName = getAttemptUserName(attempt.user);
-      return (
-        <View style={styles.attemptLogItem}>
-          <View style={styles.attemptLogItemMain}>
-            <Text style={styles.attemptDate}>
-              {attemptName} — {aDate}
-            </Text>
-            <Text style={styles.attemptSubscores}>
-              C: {contentScore} | F: {fluencyScore} | P: {pronScore}
-            </Text>
-          </View>
-          <AttemptAudioButton
-            hasFile={hasAudioFile}
-            isPlaying={!!isThisPlaying}
-            onPress={handlePlay}
-          />
-          <View
-            style={[
-              styles.attemptScoreBadge,
-              { backgroundColor: getOverlayScoreColor(aPercent) },
-            ]}
-          >
-            <Text style={styles.attemptScoreBadgeText}>{aRaw}</Text>
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.attemptLogItem}>
-        <View style={styles.attemptLogItemMain}>
-          <Text style={styles.attemptDate}>{aDate}</Text>
-          <Text style={styles.attemptSubscores}>
-            C: {contentScore} | F: {fluencyScore} | P: {pronScore}
-          </Text>
-        </View>
+    // Right-side controls (play + score badge) rendered as a tight
+    // cluster so they read as a single unit instead of two separate
+    // floating elements scattered across the row.
+    const rightCluster = (
+      <View style={styles.attemptRightCluster}>
         <AttemptAudioButton
           hasFile={hasAudioFile}
           isPlaying={!!isThisPlaying}
@@ -126,6 +94,35 @@ const AttemptItem = React.memo(
         >
           <Text style={styles.attemptScoreBadgeText}>{aRaw}</Text>
         </View>
+      </View>
+    );
+
+    if (isOthers) {
+      const attemptName = getAttemptUserName(attempt.user);
+      return (
+        <View style={styles.attemptLogItem}>
+          <View style={styles.attemptLogItemMain}>
+            <Text style={styles.attemptDate}>
+              {attemptName} — {aDate}
+            </Text>
+            <Text style={styles.attemptSubscores}>
+              C: {contentScore} | F: {fluencyScore} | P: {pronScore}
+            </Text>
+          </View>
+          {rightCluster}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.attemptLogItem}>
+        <View style={styles.attemptLogItemMain}>
+          <Text style={styles.attemptDate}>{aDate}</Text>
+          <Text style={styles.attemptSubscores}>
+            C: {contentScore} | F: {fluencyScore} | P: {pronScore}
+          </Text>
+        </View>
+        {rightCluster}
       </View>
     );
   },

@@ -1,6 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Image,
+  ActivityIndicator,
+  Animated,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -96,6 +97,134 @@ const ViewerCloseButton: React.FC<{ onRequestClose: () => void }> = ({
   </TouchableOpacity>
 );
 
+// Image-broken icon shown when the question image fails to load.
+// Pictogram of a torn picture frame — communicates "the image is
+// missing" without relying on copy.
+const BrokenImageIcon: React.FC = () => (
+  <Svg width={scale(28)} height={scale(28)} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M3 5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"
+      stroke="#8E8E93"
+      strokeWidth={1.5}
+    />
+    <Path
+      d="M3 17l5-5 4 4 3-3 6 6"
+      stroke="#8E8E93"
+      strokeWidth={1.5}
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M4 4l16 16"
+      stroke="#FF3B30"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
+interface QuestionImageProps {
+  uri: string;
+  onTap: () => void;
+}
+
+/**
+ * Wraps the question image with explicit loading + error states so the
+ * user always has feedback. Three states:
+ *   1. Loading — spinner centred over the placeholder
+ *   2. Error   — broken-image icon + "Tap to retry" affordance
+ *   3. Loaded  — image fades in over 200ms
+ *
+ * The `reloadKey` trick (incrementing a number) is how we force RN's
+ * Image component to re-fetch a URL — without changing the source uri
+ * the cache layer will short-circuit the retry.
+ */
+const QuestionImage: React.FC<QuestionImageProps> = ({ uri, onTap }) => {
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>(
+    'loading',
+  );
+  const [reloadKey, setReloadKey] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Reset state every time the underlying uri changes (e.g. user
+  // switched questions or selected a different voice variant). Without
+  // this, the previous question's "loaded" state would leak into the
+  // new one and the spinner would never appear.
+  useEffect(() => {
+    setStatus('loading');
+    setReloadKey(0);
+    fadeAnim.setValue(0);
+  }, [uri, fadeAnim]);
+
+  const handleLoad = useCallback(() => {
+    setStatus('loaded');
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
+
+  const handleError = useCallback(() => {
+    setStatus('error');
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    setStatus('loading');
+    fadeAnim.setValue(0);
+    setReloadKey(k => k + 1);
+  }, [fadeAnim]);
+
+  const renderOverlay = () => {
+    if (status === 'loading') {
+      return (
+        <View style={viewerStyles.statusOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color="#94C23C" />
+        </View>
+      );
+    }
+    if (status === 'error') {
+      return (
+        <TouchableOpacity
+          style={viewerStyles.statusOverlay}
+          activeOpacity={0.8}
+          onPress={handleRetry}
+        >
+          <BrokenImageIcon />
+          <Text style={viewerStyles.errorText}>Couldn't load image</Text>
+          <Text style={viewerStyles.retryText}>Tap to retry</Text>
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <TouchableWithoutFeedback
+      onPress={status === 'loaded' ? onTap : undefined}
+      accessibilityRole="imagebutton"
+    >
+      <View style={styles.imageWrapper}>
+        <Animated.Image
+          // Cache-busting via reloadKey — re-mounts the Image so the
+          // bridge re-issues a fresh network request on retry.
+          key={reloadKey}
+          source={{ uri }}
+          style={[styles.questionImage, { opacity: fadeAnim }]}
+          resizeMode="contain"
+          onLoad={handleLoad}
+          onError={handleError}
+        />
+        {renderOverlay()}
+        {status === 'loaded' && (
+          <View style={viewerStyles.zoomHint} pointerEvents="none">
+            <ZoomHintIcon />
+          </View>
+        )}
+      </View>
+    </TouchableWithoutFeedback>
+  );
+};
+
 // Per-category prompt block: image (Describe Image, id 3) /
 // situation (Respond to a situation, id 21) / paragraph (Read Aloud, id 1).
 export const QuestionContent: React.FC<Props> = ({
@@ -128,20 +257,7 @@ export const QuestionContent: React.FC<Props> = ({
     if (!uri) return null;
     return (
       <>
-        <TouchableWithoutFeedback onPress={openViewer} accessibilityRole="imagebutton">
-          <View style={styles.imageWrapper}>
-            <Image
-              source={{ uri }}
-              style={styles.questionImage}
-              resizeMode="contain"
-            />
-            {/* Subtle "tap to zoom" affordance — small enough to not
-                obscure the question, prominent enough to be discovered. */}
-            <View style={viewerStyles.zoomHint} pointerEvents="none">
-              <ZoomHintIcon />
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
+        <QuestionImage uri={uri} onTap={openViewer} />
 
         <ImageView
           images={viewerImages}
@@ -192,6 +308,31 @@ const viewerStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Centred container for the loading spinner / error placeholder.
+  // `position: absolute` lets it sit on top of the (possibly faded-in)
+  // Image so we don't need to swap layout while transitioning state.
+  statusOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  errorText: {
+    marginTop: scale(6),
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#48484A',
+  },
+  retryText: {
+    marginTop: scale(2),
+    fontSize: scale(11),
+    fontFamily: 'BricolageGrotesque-Regular',
+    color: '#007AFF',
   },
   closeBtn: {
     position: 'absolute',

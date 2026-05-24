@@ -607,6 +607,15 @@ export const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque-Regular',
     color: '#8E8E93',
   },
+  // Right-side cluster wrapping the inline play button + score badge.
+  // Tight `gap` keeps the two visual elements grouped so the row reads
+  // as `[date / subscores ........] [play | score]` rather than three
+  // scattered children.
+  attemptRightCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(6),
+  },
   attemptPlayBtn: {
     width: scale(22),
     height: scale(22),
@@ -614,7 +623,6 @@ export const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: scale(8),
   },
   attemptPlayBtnActive: {
     backgroundColor: '#FF3B30',

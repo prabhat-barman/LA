@@ -74,9 +74,13 @@ export const DashboardDataProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     try {
-      // 1. Fetch dashboard data (15s timeout limit)
+      // 1. Fetch dashboard data. We override the global 100s timeout because
+      // the dashboard sits behind the splash and we'd rather show cached
+      // data quickly than block on a slow request. 30s is forgiving enough
+      // for cold-cache backends + flaky networks without making the splash
+      // feel stuck.
       const dashResponse = await apiClient.get(API_ENDPOINTS.DASHBOARD_DATA, {
-        timeout: 15000,
+        timeout: 30000,
       });
       const data = dashResponse.data?.data || dashResponse.data;
       
@@ -117,35 +121,70 @@ export const DashboardDataProvider: React.FC<{ children: React.ReactNode }> = ({
       registerDeviceToken();
 
     } catch (error: any) {
-      // Suppress the well-known transient errors fired during logout / token
-      // refresh — the apiClient interceptor briefly rejects all requests after
-      // a 401 to give the auth flow time to redirect.
+      // Classify recoverable failures so the dev console doesn't light up red
+      // for things we already handle gracefully via the cache fallback below.
+      //
+      //   - Auth transients: the apiClient interceptor briefly rejects all
+      //     requests after a 401 while the auth flow redirects to SignIn.
+      //   - Timeouts (axios `ECONNABORTED`): slow backend / flaky network.
+      //   - Network errors: device offline, DNS failure, etc.
+      //
+      // For any of these we still try the offline cache so the user sees
+      // *something* instead of an empty dashboard.
       const status = error?.response?.status;
       const message: string = error?.message || '';
+      const code: string = error?.code || '';
       const isAuthTransient =
         status === 401
-        || message.includes('API blocked due to session expiration')
-        || message.includes('Network Error');
+        || message.includes('API blocked due to session expiration');
+      const isTimeout =
+        code === 'ECONNABORTED' || /timeout of \d+ms exceeded/i.test(message);
+      const isNetworkError = message.includes('Network Error');
+      const isRecoverable = isAuthTransient || isTimeout || isNetworkError;
 
-      if (!isAuthTransient) {
-        console.error('Failed to load dashboard data:', error);
-        showToast(message || 'Failed to update dashboard data', 'error');
+      if (isRecoverable) {
+        // Use `warn` (not `error`) so React Native's red-box LogBox stays
+        // quiet for these expected, recovered-from cases.
+        const tag = isAuthTransient
+          ? 'auth transient'
+          : isTimeout
+            ? 'timeout'
+            : 'offline';
+        console.warn(`Dashboard load skipped (${tag}):`, message);
       } else {
-        console.warn('Dashboard load skipped (auth transient):', message);
+        console.error('Failed to load dashboard data:', error);
       }
 
       // Hydrate from offline storage cache regardless — better to show stale
       // data than a blank screen during a flaky auth moment.
+      let usedCache = false;
       try {
         const cachedStr = await getItem('dashboard_data_cache');
         if (cachedStr) {
           setDashboardData(JSON.parse(cachedStr));
-          if (!isAuthTransient) {
-            showToast('Loaded from offline cache', 'success');
-          }
+          usedCache = true;
         }
       } catch {
         // Ignore cache fetch errors
+      }
+
+      // User-facing toast: keep it terse and actionable. Auth transients get
+      // no toast at all (the SignIn redirect speaks for itself). Other
+      // failures get a single message — different copy depending on whether
+      // we have cache to show.
+      if (!isAuthTransient) {
+        if (isTimeout || isNetworkError) {
+          showToast(
+            usedCache
+              ? 'Slow connection — showing offline data'
+              : 'Slow connection — try again in a moment',
+            usedCache ? 'success' : 'error',
+          );
+        } else if (usedCache) {
+          showToast('Loaded from offline cache', 'success');
+        } else {
+          showToast(message || 'Failed to update dashboard data', 'error');
+        }
       }
     } finally {
       setLoading(false);

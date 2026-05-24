@@ -34,15 +34,10 @@ const BAR_PATTERN = [
   20, 24, 18, 12, 16, 10, 8, 6, 4, 4,
 ];
 
-// Cosmetic voice list. The codebase doesn't yet wire a TTS / voice
-// selection backend — this dropdown is here for design parity and so the
-// UI is ready when the API lands. Changing the value is a no-op today.
-const VOICE_OPTIONS = [
-  { id: 'william', name: 'William' },
-  { id: 'olivia', name: 'Olivia' },
-  { id: 'james', name: 'James' },
-  { id: 'sophia', name: 'Sophia' },
-];
+// The voice list is now driven by the API's per-question `question_audios`
+// array (see `availableVoices` prop). The dropdown is rendered only when
+// the question has more than one variant — otherwise there's nothing to
+// switch between.
 
 // ─── Status pill ──────────────────────────────────────────────────────────
 // Coloured dot + label used at the top-right of each card to mirror the
@@ -423,19 +418,12 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
     );
   }
 
-  // ── Action button row (Stop / Play / etc.) ──
+  // ── Action button row (Record Now / Retake / Try Again) ──
+  // Note: there's no separate Stop button here. While `phase === 'recording'`
+  // the red circular leftButton already lets the user stop the take, so a
+  // duplicate full-width pill below would just be visual noise.
   let actionButton: React.ReactNode = null;
-  if (phase === 'recording') {
-    actionButton = (
-      <TouchableOpacity
-        style={styles.stopBtn}
-        onPress={() => flow.stopRecording()}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.stopBtnText}>Stop</Text>
-      </TouchableOpacity>
-    );
-  } else if (phase === 'prep_countdown') {
+  if (phase === 'prep_countdown') {
     actionButton = (
       <TouchableOpacity
         style={styles.recordNowBtn}
@@ -447,9 +435,9 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
     );
   } else if (phase === 'review' && !recordedUri) {
     // Recording failed or produced an empty clip — give the user a way
-    // out. The mockup doesn't show this state, but the previous review
-    // panel had a "Record Answer" affordance and removing it would strand
-    // the user.
+    // out. `retake()` skips the audio re-roll and goes straight to the
+    // prep countdown, which is the right move here because the audio has
+    // already been heard.
     actionButton = (
       <TouchableOpacity
         style={styles.retakeBtn}
@@ -457,6 +445,25 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
         activeOpacity={0.85}
       >
         <Text style={styles.retakeBtnText}>Record Answer</Text>
+      </TouchableOpacity>
+    );
+  } else if (phase === 'review' && recordedUri) {
+    // Successful recording — let the user redo the entire question from
+    // the audio wait time. Unlike `retake()` (which only resets the
+    // recorder), this chains `reset()` -> `start()` so the question
+    // audio plays again before the next prep countdown. Submit gets
+    // disabled automatically because `reset()` clears `recordedUri`.
+    actionButton = (
+      <TouchableOpacity
+        style={styles.retakeBtn}
+        onPress={() => {
+          flow.reset()
+            .then(() => flow.start())
+            .catch(() => {});
+        }}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.retakeBtnText}>Try Again</Text>
       </TouchableOpacity>
     );
   }
@@ -480,24 +487,43 @@ const RecordedCard: React.FC<RecordedCardProps> = ({
 };
 
 // ─── Speed + Voice controls row ──────────────────────────────────────────
+interface VoiceVariant {
+  label: string;
+  value: string;
+}
+
 interface SpeedVoiceRowProps {
   selectedSpeed: number;
   onSelectSpeed: (speed: number) => void;
-  selectedVoiceId: string;
-  onSelectVoice: (id: string) => void;
+  /**
+   * Voices the API has actually published audio for on the current
+   * question. The dropdown only renders if this contains 2+ entries —
+   * a single-variant question has nothing to switch between.
+   */
+  availableVoices: VoiceVariant[];
+  selectedVoiceLabel: string | null;
+  onSelectVoice: (label: string) => void;
 }
 
 const SpeedVoiceRow: React.FC<SpeedVoiceRowProps> = ({
   selectedSpeed,
   onSelectSpeed,
-  selectedVoiceId,
+  availableVoices,
+  selectedVoiceLabel,
   onSelectVoice,
 }) => {
   const [speedOpen, setSpeedOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
 
-  const selectedVoiceName =
-    VOICE_OPTIONS.find(v => v.id === selectedVoiceId)?.name || 'Default';
+  // Show the voice dropdown only when there's an actual choice to make.
+  // Some question types (and many older questions) ship with a single
+  // recorded variant — surfacing a 1-item dropdown would be noise.
+  const showVoice = availableVoices.length > 1;
+
+  const displayVoiceLabel =
+    (selectedVoiceLabel && availableVoices.find(v => v.label === selectedVoiceLabel)?.label) ||
+    availableVoices[0]?.label ||
+    'Default';
 
   return (
     <View style={styles.controlsRow}>
@@ -544,48 +570,50 @@ const SpeedVoiceRow: React.FC<SpeedVoiceRowProps> = ({
         </View>
       </View>
 
-      <View style={[styles.controlGroup, { alignItems: 'flex-end' }]}>
-        <Text style={styles.controlLabel}>Voice</Text>
-        <View style={{ zIndex: 20 }}>
-          <TouchableOpacity
-            style={styles.dropdownBtn}
-            onPress={() => {
-              setVoiceOpen(o => !o);
-              setSpeedOpen(false);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dropdownBtnText}>{selectedVoiceName}</Text>
-            <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={voiceOpen} />
-          </TouchableOpacity>
-          {voiceOpen && (
-            <View style={[styles.dropdownPanel, styles.dropdownPanelRight]}>
-              {VOICE_OPTIONS.map(v => (
-                <TouchableOpacity
-                  key={v.id}
-                  style={[
-                    styles.dropdownItem,
-                    selectedVoiceId === v.id && styles.dropdownItemActive,
-                  ]}
-                  onPress={() => {
-                    onSelectVoice(v.id);
-                    setVoiceOpen(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      selectedVoiceId === v.id && styles.dropdownItemTextActive,
-                    ]}
-                  >
-                    {v.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+      {showVoice && (
+        <View style={[styles.controlGroup, { alignItems: 'flex-end' }]}>
+          <Text style={styles.controlLabel}>Voice</Text>
+          <View style={{ zIndex: 20 }}>
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={() => {
+                setVoiceOpen(o => !o);
+                setSpeedOpen(false);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownBtnText}>{displayVoiceLabel}</Text>
+              <CaretDownIcon size={scale(10)} color="#1C1C1E" expanded={voiceOpen} />
+            </TouchableOpacity>
+            {voiceOpen && (
+              <View style={[styles.dropdownPanel, styles.dropdownPanelRight]}>
+                {availableVoices.map(v => {
+                  const active = selectedVoiceLabel === v.label;
+                  return (
+                    <TouchableOpacity
+                      key={v.label}
+                      style={[styles.dropdownItem, active && styles.dropdownItemActive]}
+                      onPress={() => {
+                        onSelectVoice(v.label);
+                        setVoiceOpen(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          active && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {v.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 };
@@ -600,8 +628,14 @@ interface UnifiedMediaBarProps {
   isSubmitting?: boolean;
   selectedSpeed: number;
   onSelectSpeed: (s: number) => void;
-  selectedVoiceId: string;
-  onSelectVoice: (id: string) => void;
+  /**
+   * Voice variants attached to the current question (driven by the API's
+   * `question_audios[]` list). Pass `[]` if the question has no variants;
+   * the dropdown only renders when there's more than one option.
+   */
+  availableVoices: VoiceVariant[];
+  selectedVoiceLabel: string | null;
+  onSelectVoice: (label: string) => void;
 }
 
 /**
@@ -625,7 +659,8 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
   isSubmitting = false,
   selectedSpeed,
   onSelectSpeed,
-  selectedVoiceId,
+  availableVoices,
+  selectedVoiceLabel,
   onSelectVoice,
 }) => {
   const flow = useRecorder();
@@ -656,9 +691,23 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
     );
   }
 
+  // Sequential layout: while the question audio is still in its pre-roll
+  // (`idle` / `audio_wait`) or actively playing (`audio_playing`), only the
+  // Question Audio card + Speed/Voice controls are visible — these are the
+  // only affordances that matter before the user has heard the prompt. Once
+  // the audio finishes (`audio_done` and onward: prep countdown, recording,
+  // review), the question card and its controls collapse out and the
+  // Recorded card takes over the surface. Cheap conditional render — both
+  // sub-trees are unmounted when not needed, so child effects (waveform
+  // animations, audio-progress subscriptions, voice dropdowns) don't keep
+  // running in the background.
+  const phase = flow.phase;
+  const isPreRecordingPhase =
+    phase === 'idle' || phase === 'audio_wait' || phase === 'audio_playing';
+
   return (
     <View style={styles.container}>
-      {hasAudio && (
+      {hasAudio && isPreRecordingPhase && (
         <QuestionAudioCard
           audioProgress={audioProgress}
           secondsLeft={secondsLeft}
@@ -667,7 +716,7 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
         />
       )}
 
-      {hasRecording && (
+      {hasRecording && !isPreRecordingPhase && (
         <RecordedCard
           recordedUri={recordedUri}
           recordingDurationSec={recordingDurationSec}
@@ -676,11 +725,12 @@ export const UnifiedMediaBar: React.FC<UnifiedMediaBarProps> = ({
         />
       )}
 
-      {hasAudio && (
+      {hasAudio && isPreRecordingPhase && (
         <SpeedVoiceRow
           selectedSpeed={selectedSpeed}
           onSelectSpeed={onSelectSpeed}
-          selectedVoiceId={selectedVoiceId}
+          availableVoices={availableVoices}
+          selectedVoiceLabel={selectedVoiceLabel}
           onSelectVoice={onSelectVoice}
         />
       )}
@@ -773,58 +823,37 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Action row inside the recorded card
+  // Action row inside the recorded card. Children stretch to the card
+  // width so Record Now / Try Again render as full-width pills.
   actionRow: {
-    alignItems: 'flex-start',
-  },
-  stopBtn: {
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(18),
-    backgroundColor: '#FFF8EB',
-  },
-  stopBtnText: {
-    color: '#B97900',
-    fontSize: scale(12),
-    fontFamily: 'BricolageGrotesque-Bold',
-    fontWeight: 'bold',
-  },
-  playPillBtn: {
-    backgroundColor: '#94C23C',
-    borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(20),
-  },
-  playPillBtnText: {
-    color: colors.white,
-    fontSize: scale(12),
-    fontFamily: 'BricolageGrotesque-Bold',
-    fontWeight: 'bold',
+    width: '100%',
   },
   recordNowBtn: {
+    width: '100%',
     backgroundColor: '#94C23C',
     borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(18),
+    paddingVertical: scale(10),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   recordNowBtnText: {
     color: colors.white,
-    fontSize: scale(12),
+    fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Bold',
     fontWeight: 'bold',
   },
   retakeBtn: {
+    width: '100%',
     borderWidth: 1,
     borderColor: '#8E8E93',
     borderRadius: scale(8),
-    paddingVertical: scale(6),
-    paddingHorizontal: scale(18),
+    paddingVertical: scale(10),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   retakeBtnText: {
     color: '#48484A',
-    fontSize: scale(12),
+    fontSize: scale(13),
     fontFamily: 'BricolageGrotesque-Bold',
     fontWeight: 'bold',
   },

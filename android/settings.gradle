@@ -1,6 +1,30 @@
 pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
+
+// Centralized repository configuration.
+//
+// Required for @react-native-async-storage/async-storage v3+, which ships
+// its `org.asyncstorage.shared_storage:storage-android` artifact as a
+// bundled local Maven repository inside node_modules instead of publishing
+// to Maven Central. Without registering that local_repo here Gradle fails
+// with: "Could not find org.asyncstorage.shared_storage:storage-android:1.0.0".
+//
+// PREFER_SETTINGS makes these repositories authoritative for ALL projects
+// (root + subprojects + autolinked native modules), so libraries that
+// declare their own `repositories { google(); mavenCentral() }` blocks
+// still resolve correctly. We only add the AsyncStorage local_repo on top
+// of the standard pair; no node_modules library currently relies on a
+// custom maven URL (JitPack etc.), so this stays safe.
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+  repositories {
+    google()
+    mavenCentral()
+    maven { url = uri("../node_modules/@react-native-async-storage/async-storage/android/local_repo") }
+  }
+}
+
 rootProject.name = 'LA'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')

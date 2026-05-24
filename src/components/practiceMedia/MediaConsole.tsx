@@ -26,6 +26,16 @@ export interface MediaConsoleRef {
   getPhase: () => string;
 }
 
+/**
+ * Voice variant entry from the API's per-question `question_audios` list.
+ * `value` is the storage path of the recorded mp3, `label` is the voice
+ * display name (e.g. "Lily").
+ */
+export interface MediaConsoleVoiceVariant {
+  label: string;
+  value: string;
+}
+
 interface MediaConsoleProps {
   metadata: QuestionMetadata;
   isCore: boolean;
@@ -34,6 +44,15 @@ interface MediaConsoleProps {
   selectedMode: 'Normal' | 'One Line Strategy';
   categoryId: number;
   isSubmitting: boolean;
+  /**
+   * Voice variants available for the current question. The console doesn't
+   * own this state — it's lifted to the screen so it can drive
+   * `questionAudioUrl`. Pass an empty array (or omit) for question types
+   * without variants.
+   */
+  availableVoices?: MediaConsoleVoiceVariant[];
+  selectedVoiceLabel?: string | null;
+  onSelectVoice?: (label: string) => void;
   onRecordedUriChange: (uri: string | null, durationSec: number) => void;
   onError: (msg: string) => void;
 }
@@ -46,15 +65,14 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
   selectedMode,
   categoryId,
   isSubmitting,
+  availableVoices,
+  selectedVoiceLabel,
+  onSelectVoice,
   onRecordedUriChange,
   onError,
 }, ref) => {
   const [selectedSpeed, setSelectedSpeed] = useState(1.0);
   const [speedDropdownOpen, setSpeedDropdownOpen] = useState(false);
-  // The voice list is purely cosmetic right now — the codebase doesn't have
-  // a TTS / voice-switch backend wired up yet. Keeping state here so the
-  // UI is ready when the API lands.
-  const [selectedVoiceId, setSelectedVoiceId] = useState('william');
 
   const mediaFlow = useRecorder();
 
@@ -115,8 +133,9 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
           isSubmitting={isSubmitting}
           selectedSpeed={selectedSpeed}
           onSelectSpeed={setSelectedSpeed}
-          selectedVoiceId={selectedVoiceId}
-          onSelectVoice={setSelectedVoiceId}
+          availableVoices={availableVoices ?? []}
+          selectedVoiceLabel={selectedVoiceLabel ?? null}
+          onSelectVoice={onSelectVoice ?? (() => {})}
         />
       </View>
     );

@@ -644,7 +644,7 @@ export const styles = StyleSheet.create({
   },
   attemptScoreBadge: {
     borderRadius: scale(6),
-    paddingHorizontal: scale(8),
+    width: scale(32),
     paddingVertical: scale(3),
     alignItems: 'center',
     justifyContent: 'center',

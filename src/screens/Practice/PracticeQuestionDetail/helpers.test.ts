@@ -237,5 +237,16 @@ describe('PracticeQuestionDetail helpers', () => {
         sortAttemptsBy(list, 'Lowest Score').map(a => a.id),
       ).toEqual([1, 3, 2]);
     });
+
+    it('sorts correctly using subscores array when score_percent/percentage/overall_score are missing', () => {
+      const complexList = [
+        { id: 10, score: [{ score: 20, from: 100 }] } as any,
+        { id: 20, score: [{ score: 90, from: 100 }] } as any,
+        { id: 30, score: [{ score: 50, from: 100 }] } as any,
+      ];
+      expect(
+        sortAttemptsBy(complexList, 'Highest Score').map(a => a.id),
+      ).toEqual([20, 30, 10]);
+    });
   });
 });

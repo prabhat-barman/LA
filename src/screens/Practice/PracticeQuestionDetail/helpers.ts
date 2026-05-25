@@ -270,3 +270,18 @@ export const sortAttemptsBy = <T extends AttemptLog>(list: T[], filter: SortFilt
   }
   return copy.sort((a, b) => attemptSortValue(a) - attemptSortValue(b));
 };
+
+export const cleanHtmlText = (html: string): string => {
+  if (!html) return '';
+  return html
+    .replace(/<p>/gi, '')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li>/gi, '• ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<ul>/gi, '')
+    .replace(/<\/ul>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+    .replace(/\n{3,}/g, '\n\n');
+};

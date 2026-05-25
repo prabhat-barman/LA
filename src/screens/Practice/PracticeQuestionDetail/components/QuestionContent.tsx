@@ -287,7 +287,7 @@ export const QuestionContent: React.FC<Props> = ({
     );
   }
 
-  if (categoryId === 1 && questionText.length > 0) {
+  if ((categoryId === 1 || categoryId === 6 || categoryId === 7) && questionText.length > 0) {
     return <Text style={styles.paragraphText}>{questionText}</Text>;
   }
 

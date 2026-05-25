@@ -8,10 +8,12 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Linking,
   Platform,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -20,6 +22,7 @@ import {
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../navigation/AppNavigator';
 import { TagIcon } from '../../../components/atoms/Icon';
@@ -37,7 +40,7 @@ import { useRecorder } from '../../../context/RecorderContext';
 import { useAudioPlayer } from '../../../hooks/practiceMedia';
 import { tagColorStore } from '../../../utils/tagColorStore';
 import { TAG_COLOR_HEX } from './constants';
-import { normalizeDifficulty, sortAttemptsBy } from './helpers';
+import { cleanHtmlText, normalizeDifficulty, sortAttemptsBy } from './helpers';
 import { scale } from './scale';
 import { styles } from './styles';
 import type {
@@ -79,6 +82,38 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<PracticeQuestionDetailRouteProp>();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isFixedInputFocused, setIsFixedInputFocused] = useState(false);
+  const fixedInputRef = useRef<TextInput | null>(null);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+        setIsFixedInputFocused(false);
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isKeyboardVisible && fixedInputRef.current) {
+      const t = setTimeout(() => {
+        fixedInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [isKeyboardVisible]);
 
   const {
     questionId: initialQuestionId,
@@ -123,6 +158,23 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     },
     [],
   );
+
+  const [typedResponse, setTypedResponse] = useState<string>('');
+  const wordCount = useMemo(() => {
+    const trimmed = typedResponse.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  }, [typedResponse]);
+
+  const isWritingCategory = categoryId === 6 || categoryId === 7;
+  const [writingTimeLeft, setWritingTimeLeft] = useState<number>(0);
+  const formattedWritingTime = useMemo(() => {
+    const m = Math.floor(writingTimeLeft / 60);
+    const s = writingTimeLeft % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  }, [writingTimeLeft]);
+
+
 
   // Bookmarking / coloured tagging. The store is the source of truth so the
   // list screen reflects the latest value the moment we navigate back.
@@ -273,13 +325,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
   const questionText = useMemo(() => {
     if (!questionDetails) return '';
-    return (
+    const rawText =
       questionDetails.paragraph ??
       questionDetails.question ??
       questionDetails.text ??
       questionDetails.q_text ??
-      ''
-    );
+      '';
+    return cleanHtmlText(rawText);
   }, [questionDetails]);
 
   // Voice variants attached to this question (e.g. Lily / Clara / William
@@ -393,6 +445,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       setTranslationText(null);
       setScoreResult(null);
       setIsSubmitting(false);
+      setTypedResponse('');
+      setIsFixedInputFocused(false);
       setAttempts([]);
       setOthersAttempts([]);
       // Drop any voice selection from the previous question — the
@@ -576,9 +630,16 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   }, [additionalDetails, currentQuestionId, selectedReason, showToast]);
 
   const submitAnswer = useCallback(async () => {
-    if (!recordedUri) {
-      showToast('Please record your voice first.', 'error');
-      return;
+    if (isWritingCategory) {
+      if (!typedResponse.trim()) {
+        showToast('Please type your response first.', 'error');
+        return;
+      }
+    } else {
+      if (!recordedUri) {
+        showToast('Please record your voice first.', 'error');
+        return;
+      }
     }
     await samplePlayer.stop();
     attemptAudio.stop();
@@ -598,7 +659,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       formData.append('device', 'mobile');
       formData.append('isPlatform', Platform.OS);
 
-      const recordDuration = recordingDurationSec;
+      const recordDuration = isWritingCategory ? 0 : recordingDurationSec;
       const m = Math.floor(recordDuration / 60);
       const s = Math.floor(recordDuration % 60);
       const durationStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
@@ -607,7 +668,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       const strategyVal =
         categoryId === 1 ? (selectedMode === 'Normal' ? '1' : '2') : '1';
       formData.append('strategy', strategyVal);
-      formData.append('answer', '');
+      formData.append('answer', isWritingCategory ? typedResponse : '');
 
       let submitText = '';
       let submitScript = '';
@@ -638,21 +699,23 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         '';
       formData.append('q_ans', correctSampleAnswer);
 
-      let fileUri = recordedUri;
-      if (Platform.OS === 'android') {
-        const cleanPath = fileUri.replace(/^file:\/\//, '').replace(/^\/+/, '');
-        fileUri = `file:///${cleanPath}`;
-      }
+      if (!isWritingCategory && recordedUri) {
+        let fileUri = recordedUri;
+        if (Platform.OS === 'android') {
+          const cleanPath = fileUri.replace(/^file:\/\//, '').replace(/^\/+/, '');
+          fileUri = `file:///${cleanPath}`;
+        }
 
-      const fileObj = {
-        uri: fileUri,
-        type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
-        name:
-          Platform.OS === 'ios'
-            ? `sound-${currentQuestionId}.m4a`
-            : `sound-${currentQuestionId}.mp4`,
-      };
-      formData.append('file', fileObj as any);
+        const fileObj = {
+          uri: fileUri,
+          type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
+          name:
+            Platform.OS === 'ios'
+              ? `sound-${currentQuestionId}.m4a`
+              : `sound-${currentQuestionId}.mp4`,
+        };
+        formData.append('file', fileObj as any);
+      }
 
       const res = await apiClient.post(endpoint, formData);
       const data = res.data?.data ?? res.data ?? {};
@@ -677,6 +740,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     currentQuestionId,
     fetchHistoryAttempts,
     isCore,
+    isWritingCategory,
     questionDetails,
     questionText,
     recordedUri,
@@ -684,7 +748,33 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     samplePlayer,
     selectedMode,
     showToast,
+    typedResponse,
   ]);
+
+  const submitAnswerRef = useRef(submitAnswer);
+  submitAnswerRef.current = submitAnswer;
+
+  // Countdown timer for Writing categories
+  useEffect(() => {
+    if (!isWritingCategory || !metadata.timeLimitSec || loading) {
+      setWritingTimeLeft(0);
+      return;
+    }
+    setWritingTimeLeft(metadata.timeLimitSec);
+
+    const interval = setInterval(() => {
+      setWritingTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          submitAnswerRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentIndex, isWritingCategory, metadata.timeLimitSec, loading]);
 
   // Coloured Tagging. Maps a picker color to its visible hex value used on
   // the icon and chips.
@@ -851,7 +941,10 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       ) : (
         <ScrollView
           style={styles.contentScroll}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            isWritingCategory && isKeyboardVisible && { paddingBottom: scale(230) }
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <QuestionMetaBlock
@@ -876,29 +969,64 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               resolveImageUrl={resolveImageUrl}
             />
 
-            {renderPhase >= 3 ? (
-              <LocalErrorBoundary errorMessage="Failed to initialize audio console.">
-                <MediaConsole
-                  ref={mediaConsoleRef}
-                  metadata={metadata}
-                  isCore={isCore}
-                  questionAudioUrl={questionAudioUrl}
-                  questionDetailsLoaded={!!questionDetails}
-                  selectedMode={selectedMode}
-                  categoryId={categoryId}
-                  isSubmitting={isSubmitting}
-                  availableVoices={availableVoices}
-                  selectedVoiceLabel={selectedVoiceLabel}
-                  onSelectVoice={handleSelectVoice}
-                  onRecordedUriChange={handleRecordedUriChange}
-                  onError={handleMediaError}
+            {isWritingCategory && (
+              <View
+                style={[
+                  styles.writingContainer,
+                  isFixedInputFocused && { height: 0, opacity: 0, overflow: 'hidden', marginVertical: 0 }
+                ]}
+              >
+                {writingTimeLeft > 0 && !isFixedInputFocused && (
+                  <View style={styles.timerRow}>
+                    <Text style={styles.timerLabel}>Time Left: </Text>
+                    <Text style={styles.timerValue}>{formattedWritingTime}</Text>
+                  </View>
+                )}
+                <TextInput
+                  style={[
+                    styles.writingTextInput,
+                    isFixedInputFocused && { height: 0, padding: 0, borderWidth: 0 }
+                  ]}
+                  multiline
+                  placeholder="Write your response here..."
+                  placeholderTextColor="#8E8E93"
+                  value={typedResponse}
+                  onChangeText={setTypedResponse}
+                  textAlignVertical="top"
                 />
-              </LocalErrorBoundary>
-            ) : (
-              <View style={styles.consolePlaceholder}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.placeholderText}>Preparing audio controls...</Text>
+                {!isFixedInputFocused && (
+                  <Text style={styles.wordCountText}>
+                    TOTAL WORD COUNT: {wordCount}
+                  </Text>
+                )}
               </View>
+            )}
+
+            {!isWritingCategory && (
+              renderPhase >= 3 ? (
+                <LocalErrorBoundary errorMessage="Failed to initialize audio console.">
+                  <MediaConsole
+                    ref={mediaConsoleRef}
+                    metadata={metadata}
+                    isCore={isCore}
+                    questionAudioUrl={questionAudioUrl}
+                    questionDetailsLoaded={!!questionDetails}
+                    selectedMode={selectedMode}
+                    categoryId={categoryId}
+                    isSubmitting={isSubmitting}
+                    availableVoices={availableVoices}
+                    selectedVoiceLabel={selectedVoiceLabel}
+                    onSelectVoice={handleSelectVoice}
+                    onRecordedUriChange={handleRecordedUriChange}
+                    onError={handleMediaError}
+                  />
+                </LocalErrorBoundary>
+              ) : (
+                <View style={styles.consolePlaceholder}>
+                  <ActivityIndicator size="small" color="#007AFF" />
+                  <Text style={styles.placeholderText}>Preparing audio controls...</Text>
+                </View>
+              )
             )}
 
             {renderPhase >= 4 ? (
@@ -969,6 +1097,36 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         </ScrollView>
       )}
 
+      {isWritingCategory && isKeyboardVisible && !loading && renderPhase >= 2 && (
+        <View style={[styles.fixedWritingContainer, { bottom: scale(64) + insets.bottom }]}>
+          <View style={styles.timerAndWordCountRow}>
+            {writingTimeLeft > 0 ? (
+              <View style={styles.fixedTimerRow}>
+                <Text style={styles.timerLabel}>Time Left: </Text>
+                <Text style={styles.timerValue}>{formattedWritingTime}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
+            <Text style={styles.fixedWordCountText}>
+              Words: {wordCount}
+            </Text>
+          </View>
+          <TextInput
+            ref={fixedInputRef}
+            style={styles.fixedWritingTextInput}
+            multiline
+            placeholder="Write your response here..."
+            placeholderTextColor="#8E8E93"
+            value={typedResponse}
+            onChangeText={setTypedResponse}
+            textAlignVertical="top"
+            onFocus={() => setIsFixedInputFocused(true)}
+          />
+        </View>
+      )}
+
+
       <HiddenAttemptAudioWebView
         source={attemptAudio.source}
         onEnded={attemptAudio.stop}
@@ -981,7 +1139,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       <NavigationFooter
         isFirst={currentIndex === 0}
         isLast={currentIndex === questionsList.length - 1}
-        hasRecording={!!recordedUri}
+        hasRecording={isWritingCategory ? !!typedResponse.trim() : !!recordedUri}
         isSubmitting={isSubmitting}
         hasSubmitted={!!scoreResult}
         onPrev={handlePrevQuestion}

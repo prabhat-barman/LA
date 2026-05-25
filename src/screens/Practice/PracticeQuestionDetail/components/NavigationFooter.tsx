@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -33,9 +34,10 @@ export const NavigationFooter: React.FC<Props> = ({
   onNext,
   onSubmit,
 }) => {
+  const insets = useSafeAreaInsets();
   const isDisabled = !hasRecording || isSubmitting || hasSubmitted;
   return (
-    <View style={styles.navigationFooter}>
+    <View style={[styles.navigationFooter, { paddingBottom: insets.bottom, height: scale(64) + insets.bottom }]}>
       <TouchableOpacity
         style={[styles.navFooterOutlineBtn, isFirst && styles.navFooterOutlineBtnDisabled]}
         onPress={onPrev}

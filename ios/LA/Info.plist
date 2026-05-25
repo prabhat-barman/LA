@@ -13,12 +13,6 @@
 			</array>
 		</dict>
 	</array>
-	<!--
-	  Required on iOS 9+ for Linking.canOpenURL(...) to return true for these
-	  schemes. Without it, ContactSupportScreen always falls back to web maps,
-	  and any future canOpenURL("tel:")/("whatsapp:") etc. would silently fail.
-	  Mirrors the <queries> block in android/app/src/main/AndroidManifest.xml.
-	-->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>http</string>
@@ -60,11 +54,11 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string/>
+	<string></string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
+	<string>BootSplash</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>

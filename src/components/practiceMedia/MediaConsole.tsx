@@ -62,8 +62,11 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
   isCore,
   questionAudioUrl,
   questionDetailsLoaded,
-  selectedMode,
-  categoryId,
+  // selectedMode + categoryId are part of the public prop contract for
+  // future expansion (mode-specific UI, per-category telemetry); they
+  // are intentionally accepted but unused today.
+  selectedMode: _selectedMode,
+  categoryId: _categoryId,
   isSubmitting,
   availableVoices,
   selectedVoiceLabel,
@@ -76,15 +79,21 @@ export const MediaConsole = React.memo(forwardRef<MediaConsoleRef, MediaConsoleP
 
   const mediaFlow = useRecorder();
 
+  // Pull initQuestion out so the effect's dependency list is explicit;
+  // the previous shape used `mediaFlow` indirectly which tripped
+  // exhaustive-deps. `initQuestion` is stable across renders inside
+  // RecorderContext so this still re-runs only when the question
+  // identity actually changes.
+  const { initQuestion } = mediaFlow;
   useEffect(() => {
-    mediaFlow.initQuestion({
+    initQuestion({
       metadata,
       isCore,
       audioUrl: questionAudioUrl,
       autoStart: questionDetailsLoaded,
       onError,
     });
-  }, [metadata, isCore, questionAudioUrl, questionDetailsLoaded, onError]);
+  }, [initQuestion, metadata, isCore, questionAudioUrl, questionDetailsLoaded, onError]);
 
   const { setPlaybackRate } = mediaFlow;
   useEffect(() => {

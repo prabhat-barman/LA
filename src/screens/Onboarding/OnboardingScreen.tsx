@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -8,9 +8,9 @@ import {
   Animated,
   Easing,
   Dimensions,
-  SafeAreaView,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import LinearGradient from 'react-native-linear-gradient';
@@ -29,19 +29,49 @@ const { width } = Dimensions.get('window');
 // Simple scale utility
 const scale = (size: number) => (width / 375) * size;
 
-const FloatingAsset = ({ SvgComponent, radius, speed, startAngle, size }: any) => {
+interface FloatingAssetProps {
+  SvgComponent: React.ComponentType<{ width: number; height: number }>;
+  radius: number;
+  speed: number;
+  startAngle: number;
+  size: number;
+  // When false, the orbit pauses. Used to halt animations when the
+  // screen is unfocused so we don't burn CPU/GPU off-screen and don't
+  // accumulate runaway loops on every navigation back.
+  active: boolean;
+}
+
+const FloatingAsset: React.FC<FloatingAssetProps> = ({
+  SvgComponent,
+  radius,
+  speed,
+  startAngle,
+  size,
+  active,
+}) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    if (!active) return;
+    const loop = Animated.loop(
       Animated.timing(animatedValue, {
         toValue: 1,
         duration: speed,
         easing: Easing.linear,
         useNativeDriver: true,
+        // Decorative — don't block interaction priority queues.
+        isInteraction: false,
       }),
-    ).start();
-  }, [animatedValue, speed]);
+    );
+    loop.start();
+    // Critical: stop the loop on unmount AND on `active` flip so we
+    // don't leak overlapping loops on Fast Refresh / re-focus.
+    return () => {
+      loop.stop();
+      animatedValue.stopAnimation();
+      animatedValue.setValue(0);
+    };
+  }, [animatedValue, speed, active]);
 
   const angle = animatedValue.interpolate({
     inputRange: [0, 1],
@@ -73,8 +103,24 @@ const FloatingAsset = ({ SvgComponent, radius, speed, startAngle, size }: any) =
 
 const OnboardingScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
   const baseSize = width;
   const illustrationHeight = baseSize * 1.1;
+  // Make sure the "Sign In" link clears the Android gesture bar.
+  // SafeAreaView from react-native doesn't pad the bottom on Android,
+  // so we mix in the safe-area inset manually with a sensible floor.
+  const bottomPadding = Math.max(scale(20), insets.bottom + scale(8));
+
+  // Pause the orbit animations whenever the screen isn't focused —
+  // saves a meaningful amount of CPU/GPU on slow devices and prevents
+  // overlapping loops piling up across navigations / Fast Refresh.
+  const [animationsActive, setAnimationsActive] = React.useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setAnimationsActive(true);
+      return () => setAnimationsActive(false);
+    }, []),
+  );
 
   const handleStartToday = () => {
     navigation.navigate('SignUp');
@@ -129,6 +175,7 @@ const OnboardingScreen = () => {
                 radius={baseSize * 0.36}
                 speed={8000}
                 startAngle={-Math.PI / 1.5}
+                active={animationsActive}
               />
 
               <FloatingAsset
@@ -137,6 +184,7 @@ const OnboardingScreen = () => {
                 radius={baseSize * 0.38}
                 speed={12000}
                 startAngle={-Math.PI / 4}
+                active={animationsActive}
               />
 
               <FloatingAsset
@@ -145,6 +193,7 @@ const OnboardingScreen = () => {
                 radius={baseSize * 0.32}
                 speed={10000}
                 startAngle={Math.PI / 1.2}
+                active={animationsActive}
               />
 
               <FloatingAsset
@@ -153,10 +202,11 @@ const OnboardingScreen = () => {
                 radius={baseSize * 0.40}
                 speed={15000}
                 startAngle={Math.PI / 4}
+                active={animationsActive}
               />
             </View>
 
-            <View style={styles.bottomSection}>
+            <View style={[styles.bottomSection, { paddingBottom: bottomPadding }]}>
               <Text style={styles.title}>
                 Your Journey to{"\n"}Excellence Starts Here
               </Text>
@@ -170,6 +220,9 @@ const OnboardingScreen = () => {
                 activeOpacity={0.8}
                 style={styles.buttonWrapper}
                 onPress={handleStartToday}
+                accessibilityRole="button"
+                accessibilityLabel="Start Today"
+                accessibilityHint="Creates a new account"
               >
                 <LinearGradient
                   colors={[colors.accentLight, colors.accent]}
@@ -179,7 +232,15 @@ const OnboardingScreen = () => {
                 </LinearGradient>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.loginLink} onPress={handleSignIn}>
+              <TouchableOpacity
+                style={styles.loginLink}
+                onPress={handleSignIn}
+                activeOpacity={0.7}
+                hitSlop={{ top: 16, bottom: 16, left: 24, right: 24 }}
+                accessibilityRole="button"
+                accessibilityLabel="Already have an account? Sign In"
+                accessibilityHint="Opens the sign in screen"
+              >
                 <Text style={styles.alreadyAccountText}>
                   Already have an account?{" "}
                 </Text>
@@ -314,6 +375,10 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     flexDirection: 'row',
+    paddingVertical: scale(12),
+    paddingHorizontal: scale(16),
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   alreadyAccountText: {
     ...theme.typography.regular,

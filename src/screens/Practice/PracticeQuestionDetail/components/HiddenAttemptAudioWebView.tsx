@@ -1,6 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { logger } from '../../../../services/logger';
 import { styles } from '../styles';
 
 interface Props {
@@ -63,7 +64,7 @@ export const HiddenAttemptAudioWebView: React.FC<Props> = ({ source, onEnded, on
         }}
         onError={e => {
           if (__DEV__) {
-            console.warn('[QuestionDetail] webview load error:', e.nativeEvent);
+            logger.warn('[QuestionDetail] webview load error:', e.nativeEvent);
           }
         }}
         style={styles.hiddenAttemptVideo}

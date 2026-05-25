@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { logger } from '../../../../services/logger';
 import { ensureArray, getCategoryDetails, resolveSubscore } from '../helpers';
 import type { ScoreResult } from '../types';
 import type { CategoryDetail } from '../constants';
@@ -37,7 +38,7 @@ export const useScoreBreakdown = (
         const parsed = JSON.parse(scoreResult.new_html);
         if (Array.isArray(parsed)) return parsed;
       } catch (e) {
-        console.warn('Failed to parse new_html', e);
+        logger.warn('Failed to parse new_html', e);
       }
     }
     if (scoreResult?.words && Array.isArray(scoreResult.words)) {

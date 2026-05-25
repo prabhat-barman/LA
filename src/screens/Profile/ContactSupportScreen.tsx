@@ -18,6 +18,7 @@ import { SubHeader } from '../../components/molecules/SubHeader';
 import { EnvelopeIcon, PhoneCallIcon, MapPinIcon } from '../../components/atoms/Icon';
 import { useToast } from '../../context/ToastContext';
 import apiClient from '../../services/apiClient';
+import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import { useUser } from '../../context/UserContext';
 
@@ -67,7 +68,7 @@ export const ContactSupportScreen: React.FC = () => {
           address: data?.address || data?.office_address || data?.location,
         });
       } catch (err) {
-        console.warn('Failed to fetch contact details from API:', err);
+        logger.warn('Failed to fetch contact details from API:', err);
       }
     };
     fetchContactDetails();
@@ -97,7 +98,7 @@ export const ContactSupportScreen: React.FC = () => {
         });
       }
     } catch (err) {
-      console.warn('Could not redirect contact option:', err);
+      logger.warn('Could not redirect contact option:', err);
       showToast('Could not open external app.', 'error');
     }
   };
@@ -118,7 +119,7 @@ export const ContactSupportScreen: React.FC = () => {
       showToast('Your message has been sent successfully!', 'success');
       navigation.goBack();
     } catch (err: any) {
-      console.warn('Failed to submit support query:', err);
+      logger.warn('Failed to submit support query:', err);
       showToast(err?.message || 'Failed to send message. Please try again.', 'error');
     } finally {
       setSending(false);

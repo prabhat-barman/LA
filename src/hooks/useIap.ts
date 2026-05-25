@@ -20,6 +20,7 @@ import {
   type PurchaseError,
 } from 'react-native-iap';
 import apiClient from '../services/apiClient';
+import { logger } from '../services/logger';
 import { API_ENDPOINTS } from '../config/apiConfig';
 import { isPteCore } from '../config/appVariantConfig';
 
@@ -154,10 +155,10 @@ export const useIap = (): UseIapReturn => {
   const loadPrices = useCallback(async () => {
     const skus = buildSkus();
     setIsLoadingPrices(true);
-    console.log('[useIap] Fetching subscription products from store for SKUs:', skus.all);
+    logger.log('[useIap] Fetching subscription products from store for SKUs:', skus.all);
     try {
       const storeProducts = await fetchProducts({ skus: skus.all, type: 'subs' });
-      console.log('[useIap] Fetched products response from store:', storeProducts);
+      logger.log('[useIap] Fetched products response from store:', storeProducts);
       if (!storeProducts) {
         throw new Error('Failed to fetch products from store');
       }
@@ -165,7 +166,7 @@ export const useIap = (): UseIapReturn => {
         prev.map((plan) => {
           const found = storeProducts.find((p) => p.id === plan.sku);
           if (!found) {
-            console.log(`[useIap] SKU not found in store response: ${plan.sku}`);
+            logger.log(`[useIap] SKU not found in store response: ${plan.sku}`);
             return plan;
           }
 
@@ -186,7 +187,7 @@ export const useIap = (): UseIapReturn => {
         }),
       );
     } catch (err) {
-      console.warn('[useIap] loadPrices error:', err);
+      logger.warn('[useIap] loadPrices error:', err);
     } finally {
       setIsLoadingPrices(false);
     }
@@ -206,7 +207,7 @@ export const useIap = (): UseIapReturn => {
           await loadPrices();
         }
       } catch (err) {
-        console.warn('[useIap] initConnection error:', err);
+        logger.warn('[useIap] initConnection error:', err);
       }
     };
 
@@ -240,7 +241,7 @@ export const useIap = (): UseIapReturn => {
           }
         } catch (err) {
           setIsPurchasing(false);
-          console.warn('[useIap] purchaseUpdatedListener error:', err);
+          logger.warn('[useIap] purchaseUpdatedListener error:', err);
         }
       },
     );
@@ -317,7 +318,7 @@ export const useIap = (): UseIapReturn => {
         Alert.alert('Verification Failed', 'Could not verify your previous purchase. Contact support if the issue persists.');
       }
     } catch (err) {
-      console.warn('[useIap] restorePurchases error:', err);
+      logger.warn('[useIap] restorePurchases error:', err);
       Alert.alert('Restore Failed', 'Something went wrong. Please try again.');
     } finally {
       setIsRestoring(false);
@@ -373,7 +374,7 @@ async function verifyWithBackend(
     const status = err?.response?.status;
     // 4xx = backend rejected; 5xx = server error; network error = fail
     if (status && status >= 200 && status < 300) return true;
-    console.warn('[useIap] verifyWithBackend failed:', err?.response?.data ?? err?.message);
+    logger.warn('[useIap] verifyWithBackend failed:', err?.response?.data ?? err?.message);
     return false;
   }
 }
@@ -418,7 +419,7 @@ async function saveSubscriptionToStorage(
       JSON.stringify([entry, ...filtered]),
     );
   } catch (err) {
-    console.warn('[useIap] saveSubscriptionToStorage error:', err);
+    logger.warn('[useIap] saveSubscriptionToStorage error:', err);
   }
 }
 

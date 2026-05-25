@@ -25,11 +25,22 @@ export const SubHeader: React.FC<SubHeaderProps> = ({ title, onBack, rightElemen
         { paddingTop: insets.top, height: scale(56) + insets.top },
       ]}
     >
-      <TouchableOpacity style={styles.backButton} onPress={onBack} hitSlop={HIT_SLOP}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={onBack}
+        hitSlop={HIT_SLOP}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        accessibilityHint="Returns to the previous screen"
+      >
         <ChevronLeftIcon size={scale(24)} color="#1C1F2A" strokeWidth={2} />
       </TouchableOpacity>
 
-      <Text style={styles.title} numberOfLines={1}>
+      <Text
+        style={styles.title}
+        numberOfLines={1}
+        accessibilityRole="header"
+      >
         {title}
       </Text>
 

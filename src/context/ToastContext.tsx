@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
-import { StyleSheet, Text, Animated, Dimensions, SafeAreaView } from 'react-native';
+import { StyleSheet, Text, Animated, Dimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { theme } from '../theme';
 
@@ -14,6 +15,7 @@ interface ToastContextType {
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const insets = useSafeAreaInsets();
   const [message, setMessage] = useState('');
   const [type, setType] = useState<ToastType>('info');
   const [visible, setVisible] = useState(false);
@@ -82,7 +84,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <ToastContext.Provider value={contextValue}>
       {children}
       {visible && (
-        <SafeAreaView style={styles.toastWrapper} pointerEvents="none">
+        <View style={[styles.toastWrapper, { paddingTop: insets.top }]} pointerEvents="none">
           <Animated.View
             style={[
               styles.toastContainer,
@@ -95,7 +97,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           >
             <Text style={styles.toastText}>{message}</Text>
           </Animated.View>
-        </SafeAreaView>
+        </View>
       )}
     </ToastContext.Provider>
   );

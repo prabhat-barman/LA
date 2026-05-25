@@ -150,8 +150,8 @@ export const useAudioPlayer = (
       // Resolve the rate to use for this play call.
       const useRate = clampRate(playRate ?? rateRef.current);
       rateRef.current = useRate;
-      if (mountedRef.current && useRate !== rate) {
-        setRateState(useRate);
+      if (mountedRef.current) {
+        setRateState(prev => (useRate !== prev ? useRate : prev));
       }
 
       if (mountedRef.current) {
@@ -218,7 +218,7 @@ export const useAudioPlayer = (
         return false;
       }
     },
-    [detachListeners, rate],
+    [detachListeners],
   );
 
   // Cleanup on unmount. Capture the owner id at mount time so the cleanup

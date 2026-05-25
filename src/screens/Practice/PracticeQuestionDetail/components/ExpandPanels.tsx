@@ -22,15 +22,19 @@ export const TranscriptPanel: React.FC<TranscriptPanelProps> = ({
   questionText,
 }) => {
   if (!visible || !hasAudio) return null;
+  const transcriptText = (
+    questionDetails?.transcript ||
+    questionDetails?.q_transcript ||
+    questionDetails?.audio_transcript ||
+    questionDetails?.audio_script ||
+    questionText ||
+    'No transcript available.'
+  ).trim();
+
   return (
     <View style={styles.inlineExpandPanel}>
       <Text style={styles.expandPanelTitle}>Transcript</Text>
-      <Text style={styles.expandPanelText}>
-        {questionDetails?.transcript ??
-          questionDetails?.q_transcript ??
-          questionText ??
-          'No transcript available.'}
-      </Text>
+      <Text style={styles.expandPanelText}>{transcriptText}</Text>
     </View>
   );
 };

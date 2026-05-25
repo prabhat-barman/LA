@@ -1,6 +1,7 @@
 import axios, { InternalAxiosRequestConfig, AxiosResponse } from "axios";
 import { getBaseUrl } from "../config/appVariantConfig";
 import { getItem, removeItem } from "../utils/secureStorage";
+import { logger } from "./logger";
 import { resetToSignIn } from "./navigationService";
 
 let logoutSuppressed = false;
@@ -40,7 +41,7 @@ const handleSessionExpired = async () => {
       removeItem("backend_active_subscription"),
     ]);
   } catch (e) {
-    console.warn("Session expiration cleanup failed:", e);
+    logger.warn("Session expiration cleanup failed:", e);
   } finally {
     resetToSignIn();
     // Allow subsequent (post-login) traffic after a short cool-down so a fresh

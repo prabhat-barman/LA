@@ -248,8 +248,17 @@ export const normalizeDifficulty = (raw: unknown): '' | 'BEGINNER' | 'INTERMEDIA
   return '';
 };
 
-const attemptSortValue = (a: AttemptLog) =>
-  (a.score_percent ?? a.percentage ?? a.overall_score ?? a.score ?? 0) as number;
+const attemptSortValue = (a: AttemptLog): number => {
+  const flatOverall = a.score_percent ?? a.percentage ?? a.overall_score;
+  if (typeof flatOverall === 'number' && !isNaN(flatOverall)) {
+    return flatOverall;
+  }
+  if (typeof flatOverall === 'string') {
+    const num = Number(flatOverall);
+    if (!isNaN(num)) return num;
+  }
+  return computeOverallPercent(a.score);
+};
 
 // Single source of truth for the three sort modes used by both
 // "Me" and "Others" attempt lists. Latest preserves backend order.

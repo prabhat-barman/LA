@@ -28,6 +28,7 @@ import { SubHeader } from '../../../components/molecules/SubHeader';
 import { LocalErrorBoundary } from '../../../components/organisms/LocalErrorBoundary';
 import { MediaConsole, MediaConsoleRef } from '../../../components/practiceMedia';
 import apiClient from '../../../services/apiClient';
+import { logger } from '../../../services/logger';
 import { API_ENDPOINTS } from '../../../config/apiConfig';
 import { isPteCore } from '../../../config/appVariantConfig';
 import Config from '../../../config/Config';
@@ -422,13 +423,11 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           `&qid=${encodeURIComponent(String(qId))}` +
           `&search=&filterByVid=all`;
         const fullUrl = `${API_ENDPOINTS.LIST_QUESTION}/${categoryId}?${qs}`;
-        if (__DEV__) {
-          console.log(
-            '[QuestionDetail] fetch',
-            { qId, currentIndex, listIndex, openQuesPos, listLen: questionsList.length },
-            fullUrl,
-          );
-        }
+        logger.log(
+          '[QuestionDetail] fetch',
+          { qId, currentIndex, listIndex, openQuesPos, listLen: questionsList.length },
+          fullUrl,
+        );
         const res = await apiClient.get(fullUrl);
         const arr: any[] = Array.isArray(res.data?.data)
           ? res.data.data
@@ -484,17 +483,17 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
         const res = await apiClient.post(API_ENDPOINTS.SHOW_HISTORY, formData);
         const data = res.data?.data ?? res.data ?? [];
-        if (__DEV__ && Array.isArray(data) && data.length > 0) {
-          console.log(
-            `[QuestionDetail] history (${tab}) sample item:`,
-            JSON.stringify(data[0], null, 2),
-          );
-        }
+        // if (Array.isArray(data) && data.length > 0) {
+        //   logger.log(
+        //     `[QuestionDetail] history (${tab}) sample item:`,
+        //     JSON.stringify(data[0], null, 2),
+        //   );
+        // }
         const list = Array.isArray(data) ? data : [];
         if (tab === 'me') setAttempts(list);
         else setOthersAttempts(list);
       } catch (err) {
-        console.warn('Failed to load attempts log', err);
+        logger.warn('Failed to load attempts log', err);
         if (tab === 'me') setAttempts([]);
         else setOthersAttempts([]);
       } finally {

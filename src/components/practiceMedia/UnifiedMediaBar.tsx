@@ -175,7 +175,6 @@ const QuestionAudioCard: React.FC<QuestionAudioCardProps> = ({
   const flow = useRecorder();
   const phase = flow.phase;
 
-  const isPlayingPhase = phase === 'audio_wait' || phase === 'audio_playing';
   const isFinishedPhase =
     phase === 'audio_done' ||
     phase === 'prep_countdown' ||

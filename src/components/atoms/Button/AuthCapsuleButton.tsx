@@ -17,6 +17,9 @@ interface AuthCapsuleButtonProps {
   onPress: () => void;
   activeOpacity?: number;
   style?: any;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  disabled?: boolean;
 }
 
 const AuthCapsuleButton: React.FC<AuthCapsuleButtonProps> = ({
@@ -24,12 +27,20 @@ const AuthCapsuleButton: React.FC<AuthCapsuleButtonProps> = ({
   onPress,
   activeOpacity = 0.8,
   style,
+  accessibilityLabel,
+  accessibilityHint,
+  disabled = false,
 }) => {
   return (
     <TouchableOpacity
       style={[styles.buttonWrapper, style]}
       onPress={onPress}
       activeOpacity={activeOpacity}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
     >
       <LinearGradient
         colors={[colors.primary, colors.secondary]}

@@ -55,9 +55,14 @@ react {
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * Set this to true to Run Proguard / R8 on Release builds to minify Java
+ * bytecode and shrink resources. Keep rules live in proguard-rules.pro.
+ *
+ * Local testing: `./gradlew assembleRelease` and run the resulting APK.
+ * If a feature breaks only in release, the cause is almost always a
+ * missing `-keep` rule for a library that uses reflection.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -111,6 +116,23 @@ android {
             }
         }
     }
+    // Per-ABI APK splits. Generates one slim APK per architecture
+    // (`app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`,
+    // `app-x86_64-release.apk`) instead of one fat universal APK,
+    // dropping ~30-40% size for sideloaded installs. AAB uploads
+    // already split natively in the Play Store, so this primarily
+    // benefits internal testing distributions.
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+            // Keep universal APK enabled so the upload-to-Play-Store
+            // verification flow still has a single artifact to test.
+            universalApk true
+        }
+    }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -123,6 +145,10 @@ android {
                 ? signingConfigs.release
                 : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            // Shrink unused Android resources (drawables, strings, layouts)
+            // alongside R8 code-shrinking; only valid when minifyEnabled is
+            // true so we gate it on the same flag.
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }

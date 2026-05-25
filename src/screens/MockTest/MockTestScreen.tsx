@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
-  InteractionManager,
 } from 'react-native';
 import { Header } from '../../components/organisms/Header';
 import { colors } from '../../theme/colors';
@@ -18,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import apiClient from '../../services/apiClient';
+import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import { MockTestSkeleton } from '../../components/atoms/Skeleton';
 import { hasActiveSubscriptionFromData } from '../../utils/subscriptionMapping';
@@ -221,16 +221,26 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
   // Phased rendering state
   const [renderPhase, setRenderPhase] = useState<1 | 2 | 3>(1);
 
-  // Trigger rendering phases on toggle / category switch
+  // Trigger rendering phases on toggle / category switch.
+  // Double-rAF replaces the previously deprecated
+  // InteractionManager.runAfterInteractions in RN 0.85+.
   useEffect(() => {
     setRenderPhase(1);
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      setRenderPhase(2);
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
       requestAnimationFrame(() => {
-        setRenderPhase(3);
+        if (cancelled) return;
+        setRenderPhase(2);
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          setRenderPhase(3);
+        });
       });
     });
-    return () => interaction.cancel();
+    return () => {
+      cancelled = true;
+    };
   }, [activeToggle, selectedCategory]);
 
   const onRefresh = useCallback(() => {
@@ -294,7 +304,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
         });
         // TODO: navigate to result detail screen once it exists
         showToast(`${action} loaded for ${item.title}`, 'info');
-        console.log(`[MockTest] ${action} result for ${item.id}:`, res.data);
+        logger.log(`[MockTest] ${action} result for ${item.id}:`, res.data);
       } else {
         showToast(`${action} for ${item.title}`, 'info');
       }

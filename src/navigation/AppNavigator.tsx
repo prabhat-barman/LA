@@ -2,43 +2,26 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { navigationRef } from '../services/navigationService';
+
+// --- Cold-start path: imported eagerly so the splash → auth → dashboard
+// transition isn't gated on additional require() work. ---
 import SplashScreen from '../screens/Splash';
 import OnboardingScreen from '../screens/Onboarding/OnboardingScreen';
 import SignInScreen from '../screens/Onboarding/SignInScreen';
 import SignUpScreen from '../screens/Onboarding/SignUpScreen';
-
 import OTPScreen from '../screens/Onboarding/OTPScreen';
 import NewPasswordScreen from '../screens/Onboarding/NewPasswordScreen';
 import ForgotPasswordScreen from '../screens/Onboarding/ForgotPasswordScreen';
 import { DashboardTabNavigator } from './DashboardTabNavigator';
 
-// Profile, Support, and Settings screen imports
-import { ProfileScreen } from '../screens/Profile/ProfileScreen';
-import { PersonalInfoScreen } from '../screens/Profile/PersonalInfoScreen';
-import { EditProfileScreen } from '../screens/Profile/EditProfileScreen';
-import { ChangePasswordScreen } from '../screens/Profile/ChangePasswordScreen';
-import { SubscriptionScreen } from '../screens/Profile/SubscriptionScreen';
-import { NotificationSettingsScreen } from '../screens/Profile/NotificationSettingsScreen';
-import { ContactSupportScreen } from '../screens/Profile/ContactSupportScreen';
-import { LegalSupportScreen } from '../screens/Profile/LegalSupportScreen';
-import { TermsConditionsScreen } from '../screens/Profile/TermsConditionsScreen';
-import { PrivacyPolicyScreen } from '../screens/Profile/PrivacyPolicyScreen';
-import { RefundPolicyScreen } from '../screens/Profile/RefundPolicyScreen';
-import { FAQScreen } from '../screens/Profile/FAQScreen';
-import { NotificationsListScreen } from '../screens/Profile/NotificationsListScreen';
-import { PracticeCommonListScreen } from '../screens/Practice/PracticeCommonListScreen';
-import { PracticeQuestionDetailScreen } from '../screens/Practice/PracticeQuestionDetail';
-import { PdfListScreen } from '../screens/Menu/PdfListScreen';
-import { MicrophoneSetupScreen } from '../screens/Microphone/MicrophoneSetupScreen';
-import { LiveSessionsScreen } from '../screens/LiveSessions/LiveSessionsScreen';
-import { AudioModuleScreen } from '../modules/audio';
-import { MonthlyPredictionScreen } from '../screens/MonthlyPrediction/MonthlyPredictionScreen';
-import { DailyFeedbackListScreen } from '../screens/DailyFeedback/DailyFeedbackListScreen';
-import { DailyFeedbackDetailScreen } from '../screens/DailyFeedback/DailyFeedbackDetailScreen';
-
-// Maintenance check
+// --- Maintenance check ---
 import Config from '../config/Config';
 import { MaintenanceScreen } from '../screens/Maintenance/MaintenanceScreen';
+
+// All other screens are loaded lazily through React Navigation's
+// `getComponent` so their bundles don't ship until first navigation.
+// This shrinks the initial JS evaluation cost on cold start and also
+// keeps unused-screen modules out of the working set.
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -123,29 +106,147 @@ const AppNavigator = () => {
         <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
         <Stack.Screen name="Dashboard" component={DashboardTabNavigator} />
 
-        {/* Profile and Settings screens */}
-        <Stack.Screen name="Profile" component={ProfileScreen} />
-        <Stack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
-        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-        <Stack.Screen name="NotificationSettings" component={NotificationSettingsScreen} />
-        <Stack.Screen name="ContactSupport" component={ContactSupportScreen} />
-        <Stack.Screen name="LegalSupport" component={LegalSupportScreen} />
-        <Stack.Screen name="TermsConditions" component={TermsConditionsScreen} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-        <Stack.Screen name="RefundPolicy" component={RefundPolicyScreen} />
-        <Stack.Screen name="FAQ" component={FAQScreen} />
-        <Stack.Screen name="NotificationsList" component={NotificationsListScreen} />
-        <Stack.Screen name="PracticeCommonList" component={PracticeCommonListScreen} />
-        <Stack.Screen name="PracticeQuestionDetail" component={PracticeQuestionDetailScreen} />
-        <Stack.Screen name="PdfList" component={PdfListScreen} />
-        <Stack.Screen name="MicrophoneSetup" component={MicrophoneSetupScreen} />
-        <Stack.Screen name="LiveSessions" component={LiveSessionsScreen} />
-        <Stack.Screen name="AudioModuleDemo" component={AudioModuleScreen} />
-        <Stack.Screen name="MonthlyPrediction" component={MonthlyPredictionScreen} />
-        <Stack.Screen name="DailyFeedback" component={DailyFeedbackListScreen} />
-        <Stack.Screen name="DailyFeedbackDetail" component={DailyFeedbackDetailScreen} />
+        {/* Profile and settings screens — lazy-loaded on first navigation */}
+        <Stack.Screen
+          name="Profile"
+          getComponent={() =>
+            require('../screens/Profile/ProfileScreen').ProfileScreen
+          }
+        />
+        <Stack.Screen
+          name="PersonalInfo"
+          getComponent={() =>
+            require('../screens/Profile/PersonalInfoScreen').PersonalInfoScreen
+          }
+        />
+        <Stack.Screen
+          name="EditProfile"
+          getComponent={() =>
+            require('../screens/Profile/EditProfile').EditProfileScreen
+          }
+        />
+        <Stack.Screen
+          name="ChangePassword"
+          getComponent={() =>
+            require('../screens/Profile/ChangePasswordScreen')
+              .ChangePasswordScreen
+          }
+        />
+        <Stack.Screen
+          name="Subscription"
+          getComponent={() =>
+            require('../screens/Profile/SubscriptionScreen').SubscriptionScreen
+          }
+        />
+        <Stack.Screen
+          name="NotificationSettings"
+          getComponent={() =>
+            require('../screens/Profile/NotificationSettingsScreen')
+              .NotificationSettingsScreen
+          }
+        />
+        <Stack.Screen
+          name="ContactSupport"
+          getComponent={() =>
+            require('../screens/Profile/ContactSupportScreen')
+              .ContactSupportScreen
+          }
+        />
+        <Stack.Screen
+          name="LegalSupport"
+          getComponent={() =>
+            require('../screens/Profile/LegalSupportScreen').LegalSupportScreen
+          }
+        />
+        <Stack.Screen
+          name="TermsConditions"
+          getComponent={() =>
+            require('../screens/Profile/TermsConditionsScreen')
+              .TermsConditionsScreen
+          }
+        />
+        <Stack.Screen
+          name="PrivacyPolicy"
+          getComponent={() =>
+            require('../screens/Profile/PrivacyPolicyScreen')
+              .PrivacyPolicyScreen
+          }
+        />
+        <Stack.Screen
+          name="RefundPolicy"
+          getComponent={() =>
+            require('../screens/Profile/RefundPolicyScreen').RefundPolicyScreen
+          }
+        />
+        <Stack.Screen
+          name="FAQ"
+          getComponent={() => require('../screens/Profile/FAQScreen').FAQScreen}
+        />
+        <Stack.Screen
+          name="NotificationsList"
+          getComponent={() =>
+            require('../screens/Profile/NotificationsListScreen')
+              .NotificationsListScreen
+          }
+        />
+        <Stack.Screen
+          name="PracticeCommonList"
+          getComponent={() =>
+            require('../screens/Practice/PracticeCommonList')
+              .PracticeCommonListScreen
+          }
+        />
+        <Stack.Screen
+          name="PracticeQuestionDetail"
+          getComponent={() =>
+            require('../screens/Practice/PracticeQuestionDetail')
+              .PracticeQuestionDetailScreen
+          }
+        />
+        <Stack.Screen
+          name="PdfList"
+          getComponent={() =>
+            require('../screens/Menu/PdfListScreen').PdfListScreen
+          }
+        />
+        <Stack.Screen
+          name="MicrophoneSetup"
+          getComponent={() =>
+            require('../screens/Microphone/MicrophoneSetup').MicrophoneSetupScreen
+          }
+        />
+        <Stack.Screen
+          name="LiveSessions"
+          getComponent={() =>
+            require('../screens/LiveSessions/LiveSessionsScreen')
+              .LiveSessionsScreen
+          }
+        />
+        <Stack.Screen
+          name="AudioModuleDemo"
+          getComponent={() => require('../modules/audio').AudioModuleScreen}
+        />
+        <Stack.Screen
+          name="MonthlyPrediction"
+          getComponent={() =>
+            require('../screens/MonthlyPrediction/MonthlyPredictionScreen')
+              .MonthlyPredictionScreen
+          }
+        />
+        <Stack.Screen
+          name="DailyFeedback"
+          getComponent={() =>
+            require('../screens/DailyFeedback/DailyFeedbackListScreen')
+              .DailyFeedbackListScreen
+          }
+        />
+        <Stack.Screen
+          name="DailyFeedbackDetail"
+          getComponent={() =>
+            require('../screens/DailyFeedback/DailyFeedbackDetailScreen')
+              .DailyFeedbackDetailScreen
+          }
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

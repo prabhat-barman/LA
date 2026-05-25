@@ -4,6 +4,7 @@ import { appleAuth } from "@invertase/react-native-apple-authentication";
 import Config from "../config/Config";
 import { API_ENDPOINTS } from "../config/apiConfig";
 import apiClient from "./apiClient";
+import { logger } from "./logger";
 import { setItem } from "../utils/secureStorage";
 
 // Initialize Google Sign-in config
@@ -16,7 +17,7 @@ export const configureGoogleSignIn = () => {
       iosClientId: Config.GOOGLE_IOS_CLIENT_ID,
     });
   } catch (error) {
-    console.error("Failed to configure Google Sign-In:", error);
+    logger.error(error, "Failed to configure Google Sign-In");
   }
 };
 
@@ -47,8 +48,13 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: any
     // 5. Send credential to the backend using FormData
     const formData = new FormData();
     formData.append("credential", accessToken);
+    logger.debug("Sending Google token to backend:", {
+      url: API_ENDPOINTS.GOOGLE_LOGIN,
+      payload: { credential: "[REDACTED]" },
+    });
 
     const response = await apiClient.post(API_ENDPOINTS.GOOGLE_LOGIN, formData);
+    logger.debug("Backend response for Google login:", response.data);
     
     // Normalize inconsistent backend wraps
     const data = response.data?.original || response.data;
@@ -58,27 +64,41 @@ export const signInWithGoogle = async (): Promise<{ success: boolean; user?: any
       await setItem("user_data", JSON.stringify(data.user || {}));
       return { success: true, user: data.user };
     } else {
-      return { success: false, error: data?.message || "Google Sign-In failed" };
+      logger.error(
+        "Backend did not return access_token for Google login:",
+        data,
+      );
+      return { success: false, error: data?.message || "Google Sign-In failed: Unexpected backend response" };
     }
   } catch (error: any) {
     // Clean up sign-in state on error
     try {
       await GoogleSignin.signOut();
-    } catch {}
+    } catch (signOutError) {
+      logger.warn("Google sign-out failed after login error:", signOutError);
+    }
 
     // Map common Google error codes
     let errorMessage = "Google Sign-In failed";
     if (error.message && error.message.includes("getTokens requires a user to be signed in")) {
       errorMessage = "Google Sign-In session could not be established. Please select an account to sign in.";
     } else if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-      errorMessage = "Google login was cancelled.";
+      errorMessage = "Google login was cancelled by the user.";
     } else if (error.code === statusCodes.IN_PROGRESS) {
       errorMessage = "Google login is already in progress.";
     } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-      errorMessage = "Google Play Services not available or outdated.";
+      errorMessage = "Google Play Services not available or outdated on your device.";
+    } else if (error.code === statusCodes.SIGN_IN_REQUIRED) {
+      errorMessage = "A Google account is required to sign in.";
+    } else if (error.code === "ERR_NETWORK") {
+      errorMessage = "Network error: Could not connect to Google or backend.";
+    } else if (error.response?.data?.message) {
+      // Use backend error message if available from an Axios error
+      errorMessage = `Google Sign-In failed: ${error.response.data.message}`;
     } else {
       errorMessage = error.message || errorMessage;
     }
+    logger.error("Google Sign-In process failed:", error);
     return { success: false, error: errorMessage };
   }
 };
@@ -146,7 +166,7 @@ export const signInWithApple = async (): Promise<{ success: boolean; user?: any;
             last_name: lastName,
           });
         } catch (nameError) {
-          console.warn("Silent profile name update failed:", nameError);
+          logger.warn("Silent profile name update failed:", nameError);
         }
       }
 

@@ -33,6 +33,7 @@ import { getPdfPath } from '../../config/appVariantConfig';
 import { persistBackendActiveSubscription } from '../../utils/subscriptionValidator';
 import { getTierFromBackendSub } from '../../utils/subscriptionMapping';
 import apiClient from '../../services/apiClient';
+import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -77,7 +78,7 @@ export const ProfileScreen: React.FC = () => {
         },
       });
     } catch (err) {
-      console.warn('Silent device-token deregister failed:', err);
+      logger.warn('Silent device-token deregister failed:', err);
     }
   };
 
@@ -87,7 +88,7 @@ export const ProfileScreen: React.FC = () => {
     try {
       await apiClient.post(API_ENDPOINTS.LOGOUT);
     } catch (err) {
-      console.warn('Silent server logout failed:', err);
+      logger.warn('Silent server logout failed:', err);
     }
   };
 
@@ -108,7 +109,7 @@ export const ProfileScreen: React.FC = () => {
       await apiClient.delete(API_ENDPOINTS.USER_PROFILE_DELETE);
     } catch (err) {
       // Even if API fails, clear local data and sign out
-      console.warn('Delete account API error:', err);
+      logger.warn('Delete account API error:', err);
     } finally {
       await clearAuthArtifacts();
       await clearUser();

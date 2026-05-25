@@ -47,15 +47,32 @@ export const Header: React.FC<HeaderProps> = ({
         <Logo width={logoWidth} height={logoHeight} />
       </View>
       <View style={styles.headerRight}>
-        <TouchableOpacity style={styles.iconButton} onPress={onNotificationPress}>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={onNotificationPress}
+          accessibilityRole="button"
+          accessibilityLabel={
+            hasNotifications
+              ? 'Notifications, you have unread updates'
+              : 'Notifications'
+          }
+          accessibilityHint="Opens the notifications screen"
+        >
           <BellIcon />
           {hasNotifications && <View style={styles.notificationDot} />}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.avatarButton} onPress={onProfilePress}>
+        <TouchableOpacity
+          style={styles.avatarButton}
+          onPress={onProfilePress}
+          accessibilityRole="button"
+          accessibilityLabel="Profile"
+          accessibilityHint="Opens your profile"
+        >
           <Image
             source={{ uri }}
             onError={() => setImageError(true)}
             style={styles.avatar}
+            accessibilityIgnoresInvertColors
           />
         </TouchableOpacity>
       </View>

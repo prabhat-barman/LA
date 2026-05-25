@@ -15,11 +15,13 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		8DEA4C0B5789445A8CCC68F9 /* BootSplash.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5F32883414044553A8E74F06 /* BootSplash.storyboard */; };
 		95C776F6D3214876A516D37D /* BricolageGrotesque-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 762DFB2150444245B0EE765E /* BricolageGrotesque-ExtraBold.ttf */; };
 		96275F02885A4920851555BD /* BricolageGrotesque-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 49C4BB874DDF44F6878DD29B /* BricolageGrotesque-SemiBold.ttf */; };
 		DD97522E3A3210A7ADD5472F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		DF187C2211714E5ABC154851 /* BricolageGrotesque-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C8FF2FBD747F44FFB240ABF9 /* BricolageGrotesque-Regular.ttf */; };
 		E8B513EC4E4A4DD0A1D279E3 /* BricolageGrotesque-ExtraLight.ttf in Resources */ = {isa = PBXBuildFile; fileRef = EB047AA16F7C48B4B7B97385 /* BricolageGrotesque-ExtraLight.ttf */; };
+		E99F846543A1441D84ABAB85 /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D9D28C78CCA547FDADF6946C /* Colors.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,12 +33,14 @@
 		49C4BB874DDF44F6878DD29B /* BricolageGrotesque-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "BricolageGrotesque-SemiBold.ttf"; path = "../assets/fonts/BricolageGrotesque-SemiBold.ttf"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-LA.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-LA.release.xcconfig"; path = "Target Support Files/Pods-LA/Pods-LA.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-LA.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-LA.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5F32883414044553A8E74F06 /* BootSplash.storyboard */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = BootSplash.storyboard; path = LA/BootSplash.storyboard; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = LA/AppDelegate.swift; sourceTree = "<group>"; };
 		762DFB2150444245B0EE765E /* BricolageGrotesque-ExtraBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "BricolageGrotesque-ExtraBold.ttf"; path = "../assets/fonts/BricolageGrotesque-ExtraBold.ttf"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = LA/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		9726EF274BF64C035885C460 /* GoogleService-Info.plist */ = {isa = PBXFileReference; explicitFileType = text.plist; lastKnownFileType = text.plist; name = "GoogleService-Info.plist"; path = "LA/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		99BD6ECF4A4C4DC28E700122 /* BricolageGrotesque-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "BricolageGrotesque-Medium.ttf"; path = "../assets/fonts/BricolageGrotesque-Medium.ttf"; sourceTree = "<group>"; };
 		C8FF2FBD747F44FFB240ABF9 /* BricolageGrotesque-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "BricolageGrotesque-Regular.ttf"; path = "../assets/fonts/BricolageGrotesque-Regular.ttf"; sourceTree = "<group>"; };
+		D9D28C78CCA547FDADF6946C /* Colors.xcassets */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = folder.assetcatalog; name = Colors.xcassets; path = LA/Colors.xcassets; sourceTree = "<group>"; };
 		EB047AA16F7C48B4B7B97385 /* BricolageGrotesque-ExtraLight.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "BricolageGrotesque-ExtraLight.ttf"; path = "../assets/fonts/BricolageGrotesque-ExtraLight.ttf"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F9906A5FB8284E9B8E63C22E /* BricolageGrotesque-Light.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "BricolageGrotesque-Light.ttf"; path = "../assets/fonts/BricolageGrotesque-Light.ttf"; sourceTree = "<group>"; };
@@ -63,6 +67,8 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				5F32883414044553A8E74F06 /* BootSplash.storyboard */,
+				D9D28C78CCA547FDADF6946C /* Colors.xcassets */,
 			);
 			name = LA;
 			sourceTree = "<group>";
@@ -204,6 +210,8 @@
 				08E4F8AAA5704D2595BCE4EC /* BricolageGrotesque-Bold.ttf in Resources */,
 				09FDD8A8091940D9984E67F0 /* BricolageGrotesque-Light.ttf in Resources */,
 				077C4DE17BDB31187B1C5CFE /* GoogleService-Info.plist in Resources */,
+				8DEA4C0B5789445A8CCC68F9 /* BootSplash.storyboard in Resources */,
+				E99F846543A1441D84ABAB85 /* Colors.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

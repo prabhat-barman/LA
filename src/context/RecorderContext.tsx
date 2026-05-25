@@ -209,6 +209,9 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const audioDurationMs = player.durationMs;
   const audioProgress = player.progress;
 
+  const { play: playAudio, stop: stopAudio, setRate: setAudioRate } = player;
+  const { start: startRecorder, stop: stopRecorder, reset: resetRecorder, amplitude: recorderAmplitude } = recorder;
+
   useEffect(() => {
     audioProgressRef.current = {
       positionMs: audioPositionMs,
@@ -228,11 +231,11 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const playQuestionAudio = useCallback(async (url: string) => {
     setPhase('audio_playing');
     notifyTimerListeners(0);
-    const ok = await player.play(url);
+    const ok = await playAudio(url);
     if (!ok && phaseRef.current === 'audio_playing') {
       settleAfterAudio();
     }
-  }, [player, settleAfterAudio, notifyTimerListeners]);
+  }, [playAudio, settleAfterAudio, notifyTimerListeners]);
 
   const startRecording = useCallback(async () => {
     clearCountdown();
@@ -242,12 +245,12 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setPhase('recording');
     notifyTimerListeners(meta.recordingDuration);
 
-    await player.stop();
-    const ok = await recorder.start();
+    await stopAudio();
+    const ok = await startRecorder();
     if (!ok) {
       clearCountdown();
     }
-  }, [clearCountdown, player, recorder, notifyTimerListeners]);
+  }, [clearCountdown, stopAudio, startRecorder, notifyTimerListeners]);
 
   const startPrepCountdown = useCallback(() => {
     clearCountdown();
@@ -338,8 +341,8 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     onError?: (message: string) => void;
   }) => {
     clearCountdown();
-    player.stop().catch(() => {});
-    recorder.reset().catch(() => {});
+    stopAudio().catch(() => {});
+    resetRecorder().catch(() => {});
 
     metadataRef.current = params.metadata;
     setMaxDurationSec(params.metadata.recordingDuration);
@@ -365,7 +368,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         start();
       }, 0);
     }
-  }, [clearCountdown, player, recorder, start, notifyTimerListeners]);
+  }, [clearCountdown, stopAudio, resetRecorder, start, notifyTimerListeners]);
 
   const replayAudio = useCallback(async () => {
     const url = audioUrlRef.current;
@@ -373,21 +376,21 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     clearCountdown();
     setPhase('audio_playing');
     notifyTimerListeners(0);
-    const ok = await player.play(url);
+    const ok = await playAudio(url);
     if (!ok && phaseRef.current === 'audio_playing') {
       settleAfterAudio();
     }
-  }, [player, settleAfterAudio, notifyTimerListeners, clearCountdown]);
+  }, [playAudio, settleAfterAudio, notifyTimerListeners, clearCountdown]);
 
   const skipAudio = useCallback(async () => {
     if (phaseRef.current !== 'audio_playing' && phaseRef.current !== 'audio_wait') {
       return;
     }
     clearCountdown();
-    await player.stop();
+    await stopAudio();
     onAudioFinishRef.current?.();
     settleAfterAudio();
-  }, [player, settleAfterAudio, clearCountdown]);
+  }, [stopAudio, settleAfterAudio, clearCountdown]);
 
   const startRecordingNow = useCallback(async () => {
     if (phaseRef.current !== 'prep_countdown') return;
@@ -397,13 +400,13 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const stopRecording = useCallback(async () => {
     if (phaseRef.current !== 'recording') return;
     clearCountdown();
-    await recorder.stop();
-  }, [clearCountdown, recorder]);
+    await stopRecorder();
+  }, [clearCountdown, stopRecorder]);
 
   const retake = useCallback(() => {
     clearCountdown();
-    recorder.reset().catch(() => {});
-    player.stop().catch(() => {});
+    resetRecorder().catch(() => {});
+    stopAudio().catch(() => {});
     const meta = metadataRef.current;
     if (meta && hasRecording(meta)) {
       startPrepCountdown();
@@ -411,21 +414,21 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setPhase('idle');
       notifyTimerListeners(0);
     }
-  }, [clearCountdown, player, recorder, startPrepCountdown, notifyTimerListeners]);
+  }, [clearCountdown, stopAudio, resetRecorder, startPrepCountdown, notifyTimerListeners]);
 
   const reset = useCallback(async () => {
     clearCountdown();
-    await player.stop();
-    await recorder.reset();
+    await stopAudio();
+    await resetRecorder();
     setPhase('idle');
     setRecordedUri(null);
     setRecordingDurationSec(0);
     notifyTimerListeners(0);
-  }, [clearCountdown, player, recorder, notifyTimerListeners]);
+  }, [clearCountdown, stopAudio, resetRecorder, notifyTimerListeners]);
 
   const setPlaybackRate = useCallback(async (rate: number) => {
-    await player.setRate(rate);
-  }, [player]);
+    await setAudioRate(rate);
+  }, [setAudioRate]);
 
   // Clean up timers on unmount
   useEffect(() => {
@@ -438,7 +441,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     phase,
     recordedUri,
     recordingDurationSec,
-    amplitude: recorder.amplitude,
+    amplitude: recorderAmplitude,
     resolvedPrepTimeSec,
     getAudioProgress,
     subscribeToAudioProgress,
@@ -457,7 +460,7 @@ export const RecorderProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     phase,
     recordedUri,
     recordingDurationSec,
-    recorder.amplitude,
+    recorderAmplitude,
     resolvedPrepTimeSec,
     getAudioProgress,
     subscribeToAudioProgress,

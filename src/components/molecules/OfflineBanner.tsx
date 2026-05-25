@@ -20,13 +20,19 @@ interface OfflineBannerProps {
 export const OfflineBanner: React.FC<OfflineBannerProps> = ({
   message = "You're offline — showing cached content where available.",
 }) => {
-  const { isConnected, isInternetReachable } = useNetworkStatus();
+  const { isConnected } = useNetworkStatus();
   const insets = useSafeAreaInsets();
 
-  // Treat both "no connection" and "connected but no internet"
-  // (captive portal / DNS failure) as offline for UX purposes.
-  const offline = !isConnected || isInternetReachable === false;
-  if (!offline) return null;
+  // Only rely on `isConnected` (OS-level link state), NOT
+  // `isInternetReachable`. The latter probes clients3.google.com under
+  // the hood, which fails with false negatives on:
+  //   - regions where the probe URL is blocked / rate-limited
+  //   - slow networks where the probe times out before our axios calls
+  //   - simulators / emulators with quirky NAT
+  // Real API calls succeeding is the source of truth for connectivity;
+  // we trust those and only show the banner when the OS itself says
+  // there is no link.
+  if (isConnected) return null;
 
   // On Android, `StatusBar.currentHeight` is the most reliable fallback
   // for screens that don't sit inside a SafeAreaProvider boundary; on

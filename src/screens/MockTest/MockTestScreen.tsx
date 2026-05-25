@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
-  InteractionManager,
 } from 'react-native';
 import { Header } from '../../components/organisms/Header';
 import { colors } from '../../theme/colors';
@@ -222,16 +221,26 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
   // Phased rendering state
   const [renderPhase, setRenderPhase] = useState<1 | 2 | 3>(1);
 
-  // Trigger rendering phases on toggle / category switch
+  // Trigger rendering phases on toggle / category switch.
+  // Double-rAF replaces the previously deprecated
+  // InteractionManager.runAfterInteractions in RN 0.85+.
   useEffect(() => {
     setRenderPhase(1);
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      setRenderPhase(2);
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
       requestAnimationFrame(() => {
-        setRenderPhase(3);
+        if (cancelled) return;
+        setRenderPhase(2);
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          setRenderPhase(3);
+        });
       });
     });
-    return () => interaction.cancel();
+    return () => {
+      cancelled = true;
+    };
   }, [activeToggle, selectedCategory]);
 
   const onRefresh = useCallback(() => {

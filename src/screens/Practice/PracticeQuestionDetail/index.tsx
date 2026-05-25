@@ -483,12 +483,12 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
         const res = await apiClient.post(API_ENDPOINTS.SHOW_HISTORY, formData);
         const data = res.data?.data ?? res.data ?? [];
-        if (Array.isArray(data) && data.length > 0) {
-          logger.log(
-            `[QuestionDetail] history (${tab}) sample item:`,
-            JSON.stringify(data[0], null, 2),
-          );
-        }
+        // if (Array.isArray(data) && data.length > 0) {
+        //   logger.log(
+        //     `[QuestionDetail] history (${tab}) sample item:`,
+        //     JSON.stringify(data[0], null, 2),
+        //   );
+        // }
         const list = Array.isArray(data) ? data : [];
         if (tab === 'me') setAttempts(list);
         else setOthersAttempts(list);

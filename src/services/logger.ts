@@ -91,12 +91,10 @@ export const logger = {
   },
 
   setUserId: (userId: string) => {
-    if (isDev) console.log('[AppLog] setUserId', userId);
     safeCrash(c => c.setUserId(userId));
   },
 
   logEvent: (name: string, params?: Record<string, unknown>) => {
-    if (isDev) console.log('[AppEvent]', name, params);
     safeCrash(c => c.log(`Event: ${name} - ${JSON.stringify(params ?? {})}`));
   },
 };

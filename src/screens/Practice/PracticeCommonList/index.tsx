@@ -7,7 +7,6 @@ import React, {
 import {
   ActivityIndicator,
   FlatList,
-  InteractionManager,
   Platform,
   RefreshControl,
   ScrollView,
@@ -95,13 +94,23 @@ export const PracticeCommonListScreen: React.FC = () => {
 
   useEffect(() => {
     setRenderPhase(1);
-    const interaction = InteractionManager.runAfterInteractions(() => {
-      setRenderPhase(2);
+    let cancelled = false;
+    // Yield twice via rAF before promoting phases — same intent as the
+    // (now-deprecated in RN 0.85) InteractionManager.runAfterInteractions.
+    requestAnimationFrame(() => {
+      if (cancelled) return;
       requestAnimationFrame(() => {
-        setRenderPhase(3);
+        if (cancelled) return;
+        setRenderPhase(2);
+        requestAnimationFrame(() => {
+          if (cancelled) return;
+          setRenderPhase(3);
+        });
       });
     });
-    return () => interaction.cancel();
+    return () => {
+      cancelled = true;
+    };
   }, [activeCategoryId, activeTab]);
 
   // Questions state

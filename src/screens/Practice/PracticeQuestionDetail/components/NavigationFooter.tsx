@@ -2,7 +2,6 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '../../../../components/atoms/Icon';
@@ -18,12 +17,13 @@ interface Props {
   onPrev: () => void;
   onNext: () => void;
   onSubmit: () => void;
+  onShowScore?: () => void;
 }
 
 // Submit button has three visual states:
 //   1. Idle / disabled - no recording yet (greyed out)
 //   2. Active green   - recording present, ready to submit
-//   3. Submitted      - score already received for this question
+//   3. Submitted      - score already received for this question, becomes clickable "Score Info"
 export const NavigationFooter: React.FC<Props> = ({
   isFirst,
   isLast,
@@ -33,9 +33,10 @@ export const NavigationFooter: React.FC<Props> = ({
   onPrev,
   onNext,
   onSubmit,
+  onShowScore,
 }) => {
   const insets = useSafeAreaInsets();
-  const isDisabled = !hasRecording || isSubmitting || hasSubmitted;
+  const isDisabled = isSubmitting || (!hasSubmitted && !hasRecording);
   return (
     <View style={[styles.navigationFooter, { paddingBottom: insets.bottom, height: scale(64) + insets.bottom }]}>
       <TouchableOpacity
@@ -56,17 +57,16 @@ export const NavigationFooter: React.FC<Props> = ({
       <TouchableOpacity
         style={[
           styles.navFooterSubmitBtn,
-          isDisabled && !hasSubmitted && styles.navFooterSubmitBtnDisabled,
+          !hasSubmitted && isDisabled && styles.navFooterSubmitBtnDisabled,
           hasSubmitted && styles.navFooterSubmitBtnSubmitted,
         ]}
-        onPress={onSubmit}
-        disabled={isDisabled}
-        activeOpacity={hasSubmitted ? 1 : 0.7}
+        onPress={hasSubmitted ? onShowScore : onSubmit}
+        disabled={!hasSubmitted && isDisabled}
+        activeOpacity={0.7}
       >
         {hasSubmitted ? (
           <View style={styles.navFooterSubmitContent}>
-            <Text style={styles.navFooterSubmitText}>Submitted</Text>
-            <CheckIcon size={scale(14)} color="#FFFFFF" strokeWidth={3} />
+            <Text style={styles.navFooterSubmitText}>Score Info</Text>
           </View>
         ) : (
           <Text style={styles.navFooterSubmitText}>

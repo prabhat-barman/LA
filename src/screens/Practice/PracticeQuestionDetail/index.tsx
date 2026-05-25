@@ -17,7 +17,6 @@ import {
 } from 'react-native';
 import {
   RouteProp,
-  useFocusEffect,
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
@@ -34,6 +33,7 @@ import { isPteCore } from '../../../config/appVariantConfig';
 import Config from '../../../config/Config';
 import { Data, QUESTION_METADATA } from '../../../config/practiceData';
 import { useToast } from '../../../context/ToastContext';
+import { useRecorder } from '../../../context/RecorderContext';
 import { useAudioPlayer } from '../../../hooks/practiceMedia';
 import { tagColorStore } from '../../../utils/tagColorStore';
 import { TAG_COLOR_HEX } from './constants';
@@ -111,6 +111,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
   const renderPhase = usePhasedRender(currentIndex);
   const mediaConsoleRef = useRef<MediaConsoleRef | null>(null);
+  const mediaFlow = useRecorder();
 
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [recordingDurationSec, setRecordingDurationSec] = useState<number>(0);
@@ -520,21 +521,28 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, currentQuestionId]);
 
-  // Tear down all audio when navigating away. samplePlayer / attemptAudio
-  // expose stable callbacks but eslint can't infer that, so we suppress the
-  // exhaustive-deps warning to keep the cleanup running exactly once on
-  // every focus/blur cycle.
-  useFocusEffect(
-    useCallback(
-      () => () => {
-        mediaConsoleRef.current?.reset().catch(() => {});
-        samplePlayer.stop().catch(() => {});
-        attemptAudio.stop();
-      },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [],
-    ),
-  );
+  const mediaFlowRef = useRef(mediaFlow);
+  mediaFlowRef.current = mediaFlow;
+  const samplePlayerRef = useRef(samplePlayer);
+  samplePlayerRef.current = samplePlayer;
+  const attemptAudioRef = useRef(attemptAudio);
+  attemptAudioRef.current = attemptAudio;
+
+  // Tear down all audio when navigating away or when the screen unmounts.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      mediaFlowRef.current.reset().catch(() => {});
+      samplePlayerRef.current.stop().catch(() => {});
+      attemptAudioRef.current.stop();
+    });
+    return () => {
+      unsubscribe();
+      mediaFlowRef.current.reset().catch(() => {});
+      samplePlayerRef.current.stop().catch(() => {});
+      attemptAudioRef.current.stop();
+    };
+  }, [navigation]);
+
 
   const submitReport = useCallback(async () => {
     if (!selectedReason) {
@@ -979,6 +987,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         onPrev={handlePrevQuestion}
         onNext={handleNextQuestion}
         onSubmit={submitAnswer}
+        onShowScore={() => setScoreModalVisible(true)}
       />
 
       <ScoreResultModal

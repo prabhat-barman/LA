@@ -132,25 +132,19 @@ const MCQOptionRow: React.FC<RowProps> = React.memo(
       feedbackVariant === 'missed' && styles.mcqOptionRowMissed,
     ];
 
-    // Indicator (checkbox/radio) is filled when selected, outlined when
-    // missed (post-submit reveal), and otherwise empty.
+    // Indicator (checkbox/radio) is filled when selected or when the row
+    // is "missed" (post-submit reveal of an unselected correct answer).
+    // Fill color is red only for a wrong selection; everything else
+    // (correct, missed, plain-selected) renders green. Unfilled rows
+    // fall back to the base style's #C7C7CC border — no inline override
+    // needed.
     const indicatorFilled = selected || feedbackVariant === 'missed';
-    const indicatorColor =
-      feedbackVariant === 'correct' || feedbackVariant === 'missed'
-        ? '#34C759'
-        : feedbackVariant === 'wrong'
-        ? '#FF3B30'
-        : selected
-        ? '#34C759'
-        : '#C7C7CC';
+    const isWrong = feedbackVariant === 'wrong';
 
     const indicatorStyles = [
       isMultiple ? styles.mcqCheckbox : styles.mcqRadio,
-      indicatorFilled && {
-        backgroundColor: indicatorColor,
-        borderColor: indicatorColor,
-      },
-      !indicatorFilled && { borderColor: indicatorColor },
+      indicatorFilled && !isWrong && styles.mcqIndicatorFilledGreen,
+      indicatorFilled && isWrong && styles.mcqIndicatorFilledRed,
     ];
 
     return (

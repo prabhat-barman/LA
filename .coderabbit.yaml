@@ -18,6 +18,7 @@ reviews:
     base_branches:
       - main
       - master
+      - dev
       - develop
 
   # Block CodeRabbit from wasting tokens on generated / native build / vendor files
@@ -51,7 +52,7 @@ reviews:
     - "!recordings/**"
     - "!doc/**"
 
-  # Per-area instructions — yahin tu apne project ke rules likh sakta hai
+  # Per-area instructions — write your project rules here
   path_instructions:
     - path: "src/**/*.{ts,tsx}"
       instructions: |
@@ -114,7 +115,7 @@ reviews:
     rubocop:
       enabled: false
     swiftlint:
-      enabled: false
+      enabled: true           # lint Swift/ObjC files under ios/
 
 chat:
   auto_reply: true

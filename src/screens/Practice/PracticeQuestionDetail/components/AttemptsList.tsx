@@ -15,6 +15,7 @@ import {
 import { PlayGlyph, StopGlyph } from '../icons';
 import { scale } from '../scale';
 import { styles } from '../styles';
+import type { AttemptLog } from '../types';
 
 interface AttemptItemProps {
   attempt: any;
@@ -63,7 +64,7 @@ const AttemptAudioButton: React.FC<{
 // questions we treat the attempt as correct only when the two sets match
 // exactly — matches the scoring convention used by PTE Multi-Answer
 // (partial-credit isn't represented in the local view).
-const McqAttemptItem: React.FC<{ attempt: any; isOthers?: boolean }> = ({
+const McqAttemptItem: React.FC<{ attempt: AttemptLog; isOthers?: boolean }> = ({
   attempt,
   isOthers,
 }) => {
@@ -78,7 +79,6 @@ const McqAttemptItem: React.FC<{ attempt: any; isOthers?: boolean }> = ({
     (typeof attempt?.html === 'string' && attempt.html.trim()) ||
     (selectedSet.size > 0 ? `Selected: ${[...selectedSet].join(', ')}` : 'No selection');
 
-  const badgeColor = isCorrect ? '#34C759' : '#FF3B30';
   const badgeLabel = isCorrect ? 'Correct' : 'Wrong';
 
   const dateLabel = isOthers
@@ -95,7 +95,12 @@ const McqAttemptItem: React.FC<{ attempt: any; isOthers?: boolean }> = ({
       </View>
       <View style={styles.attemptRightCluster}>
         <View
-          style={[styles.mcqAttemptBadge, { backgroundColor: badgeColor }]}
+          style={[
+            styles.mcqAttemptBadge,
+            isCorrect
+              ? styles.mcqAttemptBadgeCorrect
+              : styles.mcqAttemptBadgeWrong,
+          ]}
         >
           <Text style={styles.mcqAttemptBadgeText}>{badgeLabel}</Text>
         </View>

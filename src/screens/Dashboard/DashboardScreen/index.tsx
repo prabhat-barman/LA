@@ -10,8 +10,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { Header } from '../../../components/organisms/Header';
 import { CircularProgressBar } from '../../../components/atoms/CircularProgressBar';
@@ -34,7 +35,7 @@ import { RootStackParamList } from '../../../navigation/AppNavigator';
 import type {
   DashboardTabParamList,
   PracticeSection,
-} from '../../../navigation/DashboardTabNavigator';
+} from '../../../navigation/types';
 import { useDashboardData } from '../../../context/DashboardDataContext';
 import { useToast } from '../../../context/ToastContext';
 import { useUser } from '../../../context/UserContext';
@@ -64,9 +65,17 @@ import type {
   VideoSkillTab,
 } from './types';
 
+// Composed navigation prop: this screen sits inside the bottom tab
+// navigator (DashboardTabNavigator), which itself sits inside the root
+// stack. The composite type lets us call both `navigate('Practice', {...})`
+// (tab) and `navigate('Profile')` (stack) without casts.
+type DashboardScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<DashboardTabParamList, 'Home'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 export const DashboardScreen = () => {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { showToast } = useToast();
   const {
     dashboardData,
@@ -112,25 +121,13 @@ export const DashboardScreen = () => {
   }, [showToast]);
 
   // Hand-off from dashboard CTAs (Today's Practice / Mock Test / category
-  // cards) to the bottom tab navigator. The `useNavigation` hook above
-  // returns the *closest* navigator, which for this screen is the bottom
-  // tab navigator (DashboardTabNavigator) — calling `getParent()` here
-  // bubbles up to the root stack, which doesn't know about the tabs.
-  // We cast the prop through `unknown` so its underlying `navigate` will
-  // accept tab routes; the cross-navigator lookup behaviour in RN-Nav
-  // handles bubble-up for stack routes like Profile elsewhere on this
-  // screen.
+  // cards) to the bottom tab navigator. The composite navigation prop
+  // above lets `navigate` accept both tab routes (Practice/Mock) and
+  // root-stack routes (Profile, etc.) without runtime casts.
   const handlePractice = useCallback(
     (category: string) => {
-      const tabNav = navigation as unknown as {
-        navigate: <T extends keyof DashboardTabParamList>(
-          name: T,
-          params?: DashboardTabParamList[T],
-        ) => void;
-      };
-
       if (category === 'Mock Test') {
-        tabNav.navigate('Mock');
+        navigation.navigate('Mock');
         return;
       }
 
@@ -141,7 +138,7 @@ export const DashboardScreen = () => {
         'Listening',
       ];
       if (PRACTICE_SECTIONS.includes(category as PracticeSection)) {
-        tabNav.navigate('Practice', {
+        navigation.navigate('Practice', {
           initialCategory: category as PracticeSection,
         });
         return;
@@ -150,7 +147,7 @@ export const DashboardScreen = () => {
       // "Today's Practice" and any other fallthrough just opens the
       // Practice tab without forcing a section — the screen keeps its
       // own last-selected section or defaults to Speaking.
-      tabNav.navigate('Practice');
+      navigation.navigate('Practice');
     },
     [navigation],
   );

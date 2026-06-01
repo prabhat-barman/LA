@@ -13,13 +13,14 @@ import { colors } from '../../theme/colors';
 import { isPteCore, getPdfPath } from '../../config/appVariantConfig';
 import { useDashboardData } from '../../context/DashboardDataContext';
 import { useToast } from '../../context/ToastContext';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 import type {
   DashboardTabParamList,
   PracticeSection,
-} from '../../navigation/DashboardTabNavigator';
+} from '../../navigation/types';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import {
@@ -98,10 +99,19 @@ interface PracticeScreenProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
+// Composed nav: PracticeScreen is a tab inside DashboardTabNavigator,
+// which sits inside the root stack. Combining both lets us call
+// `navigation.setParams({ initialCategory: undefined })` (tab-aware) and
+// `navigation.navigate('PracticeCommonList', ...)` (stack) without casts.
+type PracticeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<DashboardTabParamList, 'Practice'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) => {
   const contextData = useDashboardData();
   const toastContext = useToast();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<PracticeScreenNavigationProp>();
   // Dashboard category cards pass an `initialCategory` param so the
   // Practice tab opens scrolled to the right skill section. We read it
   // here and clear it after consuming so the next press of the same
@@ -150,11 +160,9 @@ export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) =>
     if (VALID.includes(next)) {
       setSelectedCategoryName(next);
     }
-    // `setParams` is shared by both stack and tab nav-props at runtime;
-    // we cast because the local `navigation` is typed for the parent stack.
-    (navigation as unknown as {
-      setParams: (params: { initialCategory?: PracticeSection }) => void;
-    }).setParams({ initialCategory: undefined });
+    // Composite nav prop carries the Practice tab's param shape, so
+    // setParams is type-checked against DashboardTabParamList['Practice'].
+    navigation.setParams({ initialCategory: undefined });
   }, [route.params?.initialCategory, navigation]);
 
   // ── Fetch: Categories + Tokens (parallel) ────────────────────────────────
@@ -214,7 +222,7 @@ export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) =>
   // ── Navigate to Question List ──────────────────────────────────────────────
   const handlePracticeNow = (sub: ApiSubcategory) => {
     try {
-      (navigation as any).navigate('PracticeCommonList', {
+      navigation.navigate('PracticeCommonList', {
         categoryId:     sub.id,
         categoryName:   isCore ? (sub.pte_core_title ?? sub.title) : sub.title,
         parentCategory: selectedCategoryName,

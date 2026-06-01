@@ -1085,6 +1085,21 @@ export const styles = StyleSheet.create({
     width: '100%',
     marginVertical: scale(10),
   },
+  // Applied to the question scroll's contentContainerStyle on writing
+  // categories when the keyboard is up — gives the inline TextInput
+  // enough room to scroll above the docked fixed keyboard bar.
+  writingContentKeyboardPadding: {
+    paddingBottom: scale(230),
+  },
+  // Collapses the inline writing container when the docked
+  // (`fixedWritingContainer`) input has focus so the two inputs don't
+  // visually duplicate the user's text.
+  writingContainerCollapsed: {
+    height: 0,
+    opacity: 0,
+    overflow: 'hidden',
+    marginVertical: 0,
+  },
   writingTextInput: {
     borderWidth: 1,
     borderColor: '#E5E5EA',
@@ -1097,6 +1112,13 @@ export const styles = StyleSheet.create({
     color: '#1C1F2A',
     backgroundColor: '#FAFAFA',
     textAlignVertical: 'top',
+  },
+  // Sibling of `writingContainerCollapsed` — flattens the inline
+  // TextInput itself so it occupies zero visual space.
+  writingTextInputCollapsed: {
+    height: 0,
+    padding: 0,
+    borderWidth: 0,
   },
   wordCountText: {
     fontSize: scale(11),
@@ -1248,6 +1270,18 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: scale(1),
   },
+  // Filled indicator variants for MCQOptions. Composed over the base
+  // checkbox/radio styles; covers the three "filled" states the row
+  // surfaces — neutral selected, post-submit correct/missed (both green),
+  // and post-submit wrong (red).
+  mcqIndicatorFilledGreen: {
+    backgroundColor: '#34C759',
+    borderColor: '#34C759',
+  },
+  mcqIndicatorFilledRed: {
+    backgroundColor: '#FF3B30',
+    borderColor: '#FF3B30',
+  },
   mcqEmptyState: {
     padding: scale(16),
     backgroundColor: '#FAFAFA',
@@ -1276,6 +1310,14 @@ export const styles = StyleSheet.create({
     minWidth: scale(56),
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Composed over `mcqAttemptBadge` to colour the pill green (correct)
+  // or red (wrong) without resorting to an inline backgroundColor.
+  mcqAttemptBadgeCorrect: {
+    backgroundColor: '#34C759',
+  },
+  mcqAttemptBadgeWrong: {
+    backgroundColor: '#FF3B30',
   },
   mcqAttemptBadgeText: {
     fontSize: scale(10),

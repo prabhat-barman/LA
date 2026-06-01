@@ -307,9 +307,7 @@ export const QuestionContent: React.FC<Props> = ({
     // behind the Transcript pill, so we don't render it here.
     const isReadingMcq = categoryId === 8 || categoryId === 9;
     const prompt =
-      questionDetails.question_mcq ??
-      (questionDetails as any).mcq_question ??
-      '';
+      questionDetails.question_mcq ?? questionDetails.mcq_question ?? '';
     return (
       <>
         {isReadingMcq && questionText.length > 0 && (

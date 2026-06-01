@@ -46,7 +46,12 @@ export const NavigationFooter: React.FC<Props> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const isDisabled = isSubmitting || (!hasSubmitted && !hasRecording);
-  const submittedTapHandler = submittedReadOnly ? undefined : onShowScore;
+  // Submitted CTA is only actionable when the parent both opts in
+  // (`submittedReadOnly === false`) AND wires up an `onShowScore` handler.
+  // Without this guard the button would render enabled but tap into a
+  // no-op when callers forgot to pass `onShowScore`.
+  const canShowScore = !submittedReadOnly && typeof onShowScore === 'function';
+  const submittedTapHandler = canShowScore ? onShowScore : undefined;
   return (
     <View style={[styles.navigationFooter, { paddingBottom: insets.bottom, height: scale(64) + insets.bottom }]}>
       <TouchableOpacity
@@ -69,9 +74,10 @@ export const NavigationFooter: React.FC<Props> = ({
           styles.navFooterSubmitBtn,
           !hasSubmitted && isDisabled && styles.navFooterSubmitBtnDisabled,
           hasSubmitted && styles.navFooterSubmitBtnSubmitted,
+          hasSubmitted && !canShowScore && styles.navFooterSubmitBtnDisabled,
         ]}
         onPress={hasSubmitted ? submittedTapHandler : onSubmit}
-        disabled={(!hasSubmitted && isDisabled) || (hasSubmitted && submittedReadOnly)}
+        disabled={(!hasSubmitted && isDisabled) || (hasSubmitted && !canShowScore)}
         activeOpacity={0.7}
       >
         {hasSubmitted ? (

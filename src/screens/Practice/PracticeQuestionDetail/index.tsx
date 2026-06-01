@@ -841,9 +841,18 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const submitAnswerRef = useRef(submitAnswer);
   submitAnswerRef.current = submitAnswer;
 
-  // Countdown timer for Writing categories
+  // Countdown timer for Writing categories. The timer must not fire a
+  // second submit after the user has already submitted manually (the
+  // backend would reject the dupe and the score modal would flicker).
+  // We guard by short-circuiting the effect when `isSubmitting` /
+  // `scoreResult` flip on, *and* re-checking inside the tick handler
+  // for the (rare) race where the user submits between two ticks.
   useEffect(() => {
     if (!isWritingCategory || !metadata.timeLimitSec || loading) {
+      setWritingTimeLeft(0);
+      return;
+    }
+    if (isSubmitting || scoreResult) {
       setWritingTimeLeft(0);
       return;
     }
@@ -853,7 +862,11 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       setWritingTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          submitAnswerRef.current();
+          // Re-check at fire time; state captured in closure could be
+          // stale if a manual submit landed in the last tick window.
+          if (!isSubmitting && !scoreResult) {
+            submitAnswerRef.current();
+          }
           return 0;
         }
         return prev - 1;
@@ -861,7 +874,14 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [currentIndex, isWritingCategory, metadata.timeLimitSec, loading]);
+  }, [
+    currentIndex,
+    isWritingCategory,
+    metadata.timeLimitSec,
+    loading,
+    isSubmitting,
+    scoreResult,
+  ]);
 
   // Coloured Tagging. Maps a picker color to its visible hex value used on
   // the icon and chips.
@@ -1030,7 +1050,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           style={styles.contentScroll}
           contentContainerStyle={[
             styles.contentContainer,
-            isWritingCategory && isKeyboardVisible && { paddingBottom: scale(230) }
+            isWritingCategory && isKeyboardVisible && styles.writingContentKeyboardPadding,
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -1063,7 +1083,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               <View
                 style={[
                   styles.writingContainer,
-                  isFixedInputFocused && { height: 0, opacity: 0, overflow: 'hidden', marginVertical: 0 }
+                  isFixedInputFocused && styles.writingContainerCollapsed,
                 ]}
               >
                 {writingTimeLeft > 0 && !isFixedInputFocused && (
@@ -1075,7 +1095,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                 <TextInput
                   style={[
                     styles.writingTextInput,
-                    isFixedInputFocused && { height: 0, padding: 0, borderWidth: 0 }
+                    isFixedInputFocused && styles.writingTextInputCollapsed,
                   ]}
                   multiline
                   placeholder="Write your response here..."

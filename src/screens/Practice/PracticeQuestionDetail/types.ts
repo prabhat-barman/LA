@@ -40,6 +40,10 @@ export interface QuestionDetails {
   name?: string;
   question?: string;
   question_mcq?: string;
+  // Legacy alias for `question_mcq` returned by older endpoints. Newer
+  // responses use `question_mcq`; keep both so the screen can fall back
+  // without a runtime cast.
+  mcq_question?: string;
   text?: string;
   q_text?: string;
   paragraph?: string;
@@ -91,6 +95,11 @@ export interface AttemptLog {
   correct?: string;
   html?: string;
   type?: number | string;
+  // Present on the "Other students' attempts" feed (`SHOW_HISTORY`'s
+  // `others` branch). Shape varies — sometimes an object, sometimes a
+  // single-element array — so consumers route it through
+  // `getAttemptUserName` which handles both.
+  user?: unknown;
 }
 
 export interface ScoreResult {

@@ -31,6 +31,10 @@ import {
   TrianglePeakIcon,
 } from '../../../components/atoms/Icon';
 import { RootStackParamList } from '../../../navigation/AppNavigator';
+import type {
+  DashboardTabParamList,
+  PracticeSection,
+} from '../../../navigation/DashboardTabNavigator';
 import { useDashboardData } from '../../../context/DashboardDataContext';
 import { useToast } from '../../../context/ToastContext';
 import { useUser } from '../../../context/UserContext';
@@ -107,11 +111,48 @@ export const DashboardScreen = () => {
     showToast('Class booked successfully!', 'success');
   }, [showToast]);
 
+  // Hand-off from dashboard CTAs (Today's Practice / Mock Test / category
+  // cards) to the bottom tab navigator. The `useNavigation` hook above
+  // returns the *closest* navigator, which for this screen is the bottom
+  // tab navigator (DashboardTabNavigator) — calling `getParent()` here
+  // bubbles up to the root stack, which doesn't know about the tabs.
+  // We cast the prop through `unknown` so its underlying `navigate` will
+  // accept tab routes; the cross-navigator lookup behaviour in RN-Nav
+  // handles bubble-up for stack routes like Profile elsewhere on this
+  // screen.
   const handlePractice = useCallback(
     (category: string) => {
-      showToast(`Navigating to ${category} section...`, 'success');
+      const tabNav = navigation as unknown as {
+        navigate: <T extends keyof DashboardTabParamList>(
+          name: T,
+          params?: DashboardTabParamList[T],
+        ) => void;
+      };
+
+      if (category === 'Mock Test') {
+        tabNav.navigate('Mock');
+        return;
+      }
+
+      const PRACTICE_SECTIONS: PracticeSection[] = [
+        'Speaking',
+        'Writing',
+        'Reading',
+        'Listening',
+      ];
+      if (PRACTICE_SECTIONS.includes(category as PracticeSection)) {
+        tabNav.navigate('Practice', {
+          initialCategory: category as PracticeSection,
+        });
+        return;
+      }
+
+      // "Today's Practice" and any other fallthrough just opens the
+      // Practice tab without forcing a section — the screen keeps its
+      // own last-selected section or defaults to Speaking.
+      tabNav.navigate('Practice');
     },
-    [showToast],
+    [navigation],
   );
 
   const openVideo = useCallback(
@@ -353,7 +394,9 @@ export const DashboardScreen = () => {
               style={styles.actionButtonSecondary}
               onPress={() => handlePractice('Mock Test')}
             >
-              <Text style={styles.actionTextSecondary}>Start First Mock</Text>
+              <Text style={styles.actionTextSecondary}>
+                {mocks_practiced > 0 ? 'Continue Mock Test' : 'Start First Mock'}
+              </Text>
               <ChevronRightIcon size={scale(14)} color="#1A2151" />
             </TouchableOpacity>
           </View>

@@ -11,6 +11,7 @@ jest.mock('./icons', () => {
 });
 
 import {
+  buildMcqAnswerPayload,
   computeOverallPercent,
   computeOverallRaw,
   ensureArray,
@@ -18,14 +19,21 @@ import {
   formatTime,
   getAttemptAudioFile,
   getAttemptUserName,
+  getOptionLeadingLetter,
   getOverlayScoreColor,
   getSubscoreByType,
   getWordColor,
+  isMcqCategory,
+  isMcqMultipleCategory,
+  isMcqSingleCategory,
+  isOptionCorrect,
   normalizeDifficulty,
+  parseSelectedOptionIds,
   resolveSubscore,
   sortAttemptsBy,
+  sortMcqOptions,
 } from './helpers';
-import type { AttemptLog } from './types';
+import type { AttemptLog, MCQOption } from './types';
 
 describe('PracticeQuestionDetail helpers', () => {
   describe('formatTime', () => {
@@ -247,6 +255,134 @@ describe('PracticeQuestionDetail helpers', () => {
       expect(
         sortAttemptsBy(complexList, 'Highest Score').map(a => a.id),
       ).toEqual([20, 30, 10]);
+    });
+  });
+
+  describe('MCQ helpers', () => {
+    describe('isMcqCategory family', () => {
+      it('flags reading + listening MCQ categories', () => {
+        expect(isMcqSingleCategory(8)).toBe(true);
+        expect(isMcqSingleCategory(14)).toBe(true);
+        expect(isMcqMultipleCategory(9)).toBe(true);
+        expect(isMcqMultipleCategory(15)).toBe(true);
+        expect(isMcqCategory(8)).toBe(true);
+        expect(isMcqCategory(9)).toBe(true);
+        expect(isMcqCategory(14)).toBe(true);
+        expect(isMcqCategory(15)).toBe(true);
+      });
+
+      it('rejects non-MCQ categories', () => {
+        expect(isMcqCategory(1)).toBe(false);
+        expect(isMcqCategory(6)).toBe(false);
+        expect(isMcqCategory(10)).toBe(false);
+        expect(isMcqCategory(20)).toBe(false);
+      });
+    });
+
+    describe('getOptionLeadingLetter', () => {
+      it.each([
+        ['A) foo', 0],
+        ['B) bar', 1],
+        [' C) baz', 2],
+        ['D. qux', 3],
+        ['e: lower', 4],
+      ])('parses %s', (input, expected) => {
+        expect(getOptionLeadingLetter(input)).toBe(expected);
+      });
+
+      it('returns null for non-prefixed text', () => {
+        expect(getOptionLeadingLetter('No prefix here')).toBeNull();
+        expect(getOptionLeadingLetter('')).toBeNull();
+        expect(getOptionLeadingLetter(undefined)).toBeNull();
+      });
+    });
+
+    describe('sortMcqOptions', () => {
+      it('sorts by leading letter regardless of array order', () => {
+        const input: MCQOption[] = [
+          { id: 1, options: 'D) fourth', correct: 0 },
+          { id: 2, options: 'C) third', correct: 1 },
+          { id: 3, options: 'B) second', correct: 0 },
+          { id: 4, options: 'A) first', correct: 0 },
+        ];
+        expect(sortMcqOptions(input).map(o => o.id)).toEqual([4, 3, 2, 1]);
+      });
+
+      it('falls back to index when letters are missing', () => {
+        const input: MCQOption[] = [
+          { id: 1, options: 'Yes', correct: 0, index: 2 },
+          { id: 2, options: 'No', correct: 1, index: 0 },
+          { id: 3, options: 'Maybe', correct: 0, index: 1 },
+        ];
+        expect(sortMcqOptions(input).map(o => o.id)).toEqual([2, 3, 1]);
+      });
+
+      it('handles empty / undefined input', () => {
+        expect(sortMcqOptions(undefined)).toEqual([]);
+        expect(sortMcqOptions([])).toEqual([]);
+      });
+    });
+
+    describe('isOptionCorrect', () => {
+      it('treats truthy variants as correct', () => {
+        expect(isOptionCorrect(1)).toBe(true);
+        expect(isOptionCorrect('1')).toBe(true);
+        expect(isOptionCorrect('true')).toBe(true);
+        expect(isOptionCorrect(true)).toBe(true);
+      });
+
+      it('treats falsy / other variants as incorrect', () => {
+        expect(isOptionCorrect(0)).toBe(false);
+        expect(isOptionCorrect('0')).toBe(false);
+        expect(isOptionCorrect(null)).toBe(false);
+        expect(isOptionCorrect(undefined)).toBe(false);
+        expect(isOptionCorrect('false')).toBe(false);
+      });
+    });
+
+    describe('parseSelectedOptionIds', () => {
+      it('parses a comma-separated string', () => {
+        expect([...parseSelectedOptionIds('56067,56068')]).toEqual([
+          '56067',
+          '56068',
+        ]);
+      });
+
+      it('parses single id', () => {
+        expect([...parseSelectedOptionIds('56067')]).toEqual(['56067']);
+      });
+
+      it('returns empty set for nullish input', () => {
+        expect(parseSelectedOptionIds(undefined).size).toBe(0);
+        expect(parseSelectedOptionIds(null).size).toBe(0);
+        expect(parseSelectedOptionIds('').size).toBe(0);
+      });
+
+      it('handles arrays / mixed separators', () => {
+        expect([...parseSelectedOptionIds(['1', '2'])].sort()).toEqual([
+          '1',
+          '2',
+        ]);
+        expect([...parseSelectedOptionIds('1; 2 , 3')].sort()).toEqual([
+          '1',
+          '2',
+          '3',
+        ]);
+      });
+    });
+
+    describe('buildMcqAnswerPayload', () => {
+      it('joins ids with comma', () => {
+        expect(buildMcqAnswerPayload(['56067', '56068'])).toBe('56067,56068');
+      });
+
+      it('drops empty entries', () => {
+        expect(buildMcqAnswerPayload(['', '56067'])).toBe('56067');
+      });
+
+      it('returns empty string for empty iterable', () => {
+        expect(buildMcqAnswerPayload([])).toBe('');
+      });
     });
   });
 });

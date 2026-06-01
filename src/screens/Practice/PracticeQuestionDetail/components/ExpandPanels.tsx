@@ -2,7 +2,7 @@ import React from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { CaretDownIcon } from '../../../../components/atoms/Icon';
 import { LANGUAGE_CODES, LANGUAGE_LABELS } from '../constants';
-import { formatTime } from '../helpers';
+import { formatTime, isMcqCategory, isOptionCorrect, sortMcqOptions } from '../helpers';
 import { PlayGlyph, StopGlyph } from '../icons';
 import { scale } from '../scale';
 import { styles } from '../styles';
@@ -114,6 +114,10 @@ interface SamplePanelProps {
   positionMs: number;
   durationMs: number;
   onTogglePlay: () => void;
+  // Used to switch the body into MCQ-mode (shows the correct option text
+  // instead of the legacy sample-answer string). Optional so non-MCQ
+  // callers don't need to change.
+  categoryId?: number;
 }
 
 export const SamplePanel: React.FC<SamplePanelProps> = ({
@@ -123,8 +127,38 @@ export const SamplePanel: React.FC<SamplePanelProps> = ({
   positionMs,
   durationMs,
   onTogglePlay,
+  categoryId,
 }) => {
   if (!visible) return null;
+
+  // MCQ Sample Answer is the canonical correct option(s). We derive it
+  // from `option[]` rather than the (always-null for MCQ) `sample_answer`
+  // field. For multi-answer questions we list every correct option, each
+  // on its own line.
+  if (categoryId != null && isMcqCategory(categoryId)) {
+    const correctOptions = sortMcqOptions(questionDetails?.option).filter(o =>
+      isOptionCorrect(o.correct),
+    );
+    return (
+      <View style={styles.inlineExpandPanel}>
+        <Text style={styles.expandPanelTitle}>
+          {correctOptions.length > 1 ? 'Correct Answers' : 'Correct Answer'}
+        </Text>
+        {correctOptions.length === 0 ? (
+          <Text style={styles.expandPanelText}>
+            Correct answer is not available for this question.
+          </Text>
+        ) : (
+          correctOptions.map(o => (
+            <Text key={o.id} style={styles.expandPanelText}>
+              {o.options}
+            </Text>
+          ))
+        )}
+      </View>
+    );
+  }
+
   const sampleAudio =
     questionDetails?.sample_audio ??
     questionDetails?.sample_audio_file ??

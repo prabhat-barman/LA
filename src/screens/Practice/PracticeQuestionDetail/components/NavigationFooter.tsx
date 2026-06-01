@@ -18,6 +18,13 @@ interface Props {
   onNext: () => void;
   onSubmit: () => void;
   onShowScore?: () => void;
+  // Label shown on the submit button after submission. Defaults to
+  // "Score Info" (re-opens score modal). Pass "Submitted" for flows like
+  // MCQ that don't have a re-openable result screen.
+  submittedLabel?: string;
+  // When true, the submitted-state button is rendered as a static label
+  // (no press handler) – used for MCQ where there's nothing to reopen.
+  submittedReadOnly?: boolean;
 }
 
 // Submit button has three visual states:
@@ -34,9 +41,12 @@ export const NavigationFooter: React.FC<Props> = ({
   onNext,
   onSubmit,
   onShowScore,
+  submittedLabel = 'Score Info',
+  submittedReadOnly = false,
 }) => {
   const insets = useSafeAreaInsets();
   const isDisabled = isSubmitting || (!hasSubmitted && !hasRecording);
+  const submittedTapHandler = submittedReadOnly ? undefined : onShowScore;
   return (
     <View style={[styles.navigationFooter, { paddingBottom: insets.bottom, height: scale(64) + insets.bottom }]}>
       <TouchableOpacity
@@ -60,13 +70,13 @@ export const NavigationFooter: React.FC<Props> = ({
           !hasSubmitted && isDisabled && styles.navFooterSubmitBtnDisabled,
           hasSubmitted && styles.navFooterSubmitBtnSubmitted,
         ]}
-        onPress={hasSubmitted ? onShowScore : onSubmit}
-        disabled={!hasSubmitted && isDisabled}
+        onPress={hasSubmitted ? submittedTapHandler : onSubmit}
+        disabled={(!hasSubmitted && isDisabled) || (hasSubmitted && submittedReadOnly)}
         activeOpacity={0.7}
       >
         {hasSubmitted ? (
           <View style={styles.navFooterSubmitContent}>
-            <Text style={styles.navFooterSubmitText}>Score Info</Text>
+            <Text style={styles.navFooterSubmitText}>{submittedLabel}</Text>
           </View>
         ) : (
           <Text style={styles.navFooterSubmitText}>

@@ -8,6 +8,8 @@ import {
   getAttemptUserName,
   getOverlayScoreColor,
   getSubscoreByType,
+  isMcqCategory,
+  parseSelectedOptionIds,
   resolveSubscore,
 } from '../helpers';
 import { PlayGlyph, StopGlyph } from '../icons';
@@ -19,6 +21,9 @@ interface AttemptItemProps {
   isOthers?: boolean;
   isThisPlaying?: boolean;
   onToggleAudio?: (attempt: any) => void;
+  // When set the row renders the MCQ variant (selected option text +
+  // correct/incorrect badge) instead of the speaking subscore variant.
+  isMcq?: boolean;
 }
 
 interface MemoizedAttemptsListProps {
@@ -27,6 +32,9 @@ interface MemoizedAttemptsListProps {
   playingAttemptId?: string | number | null;
   isAttemptPlaying?: boolean;
   onToggleAttemptAudio?: (attempt: any) => void;
+  // Pass the current category so the list can switch row layout to the
+  // MCQ variant. Optional to keep existing call sites untouched.
+  categoryId?: number;
 }
 
 // Small inline play/stop button used inside an attempt row. Renders nothing
@@ -50,8 +58,57 @@ const AttemptAudioButton: React.FC<{
   );
 };
 
+// MCQ attempt row. Renders the chosen option text and a correct/incorrect
+// badge derived by comparing `answer` to `correct`. For multi-answer
+// questions we treat the attempt as correct only when the two sets match
+// exactly — matches the scoring convention used by PTE Multi-Answer
+// (partial-credit isn't represented in the local view).
+const McqAttemptItem: React.FC<{ attempt: any; isOthers?: boolean }> = ({
+  attempt,
+  isOthers,
+}) => {
+  const selectedSet = parseSelectedOptionIds(attempt?.answer);
+  const correctSet = parseSelectedOptionIds(attempt?.correct);
+  const isCorrect =
+    selectedSet.size > 0 &&
+    selectedSet.size === correctSet.size &&
+    [...selectedSet].every(id => correctSet.has(id));
+  const aDate = formatAttemptDate(attempt.created_at ?? attempt.date);
+  const optionText =
+    (typeof attempt?.html === 'string' && attempt.html.trim()) ||
+    (selectedSet.size > 0 ? `Selected: ${[...selectedSet].join(', ')}` : 'No selection');
+
+  const badgeColor = isCorrect ? '#34C759' : '#FF3B30';
+  const badgeLabel = isCorrect ? 'Correct' : 'Wrong';
+
+  const dateLabel = isOthers
+    ? `${getAttemptUserName(attempt.user)} — ${aDate}`
+    : aDate;
+
+  return (
+    <View style={styles.attemptLogItem}>
+      <View style={styles.attemptLogItemMain}>
+        <Text style={styles.attemptDate}>{dateLabel}</Text>
+        <Text style={styles.mcqAttemptOptionText} numberOfLines={2}>
+          {optionText}
+        </Text>
+      </View>
+      <View style={styles.attemptRightCluster}>
+        <View
+          style={[styles.mcqAttemptBadge, { backgroundColor: badgeColor }]}
+        >
+          <Text style={styles.mcqAttemptBadgeText}>{badgeLabel}</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 const AttemptItem = React.memo(
-  ({ attempt, isOthers, isThisPlaying, onToggleAudio }: AttemptItemProps) => {
+  ({ attempt, isOthers, isThisPlaying, onToggleAudio, isMcq }: AttemptItemProps) => {
+    if (isMcq) {
+      return <McqAttemptItem attempt={attempt} isOthers={isOthers} />;
+    }
     const flatOverall =
       attempt.score_percent ?? attempt.percentage ?? attempt.overall_score;
     const aPercent =
@@ -145,7 +202,9 @@ export const MemoizedAttemptsList = React.memo(
     playingAttemptId,
     isAttemptPlaying,
     onToggleAttemptAudio,
+    categoryId,
   }: MemoizedAttemptsListProps) => {
+    const isMcq = categoryId != null && isMcqCategory(categoryId);
     const [limit, setLimit] = useState(INITIAL_PAGE_SIZE);
 
     // Reset paging when the list identity changes (switch tab / question).
@@ -191,6 +250,7 @@ export const MemoizedAttemptsList = React.memo(
               isOthers={isOthers}
               isThisPlaying={isThisPlaying}
               onToggleAudio={onToggleAttemptAudio}
+              isMcq={isMcq}
             />
           );
         })}

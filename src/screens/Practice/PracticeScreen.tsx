@@ -13,9 +13,13 @@ import { colors } from '../../theme/colors';
 import { isPteCore, getPdfPath } from '../../config/appVariantConfig';
 import { useDashboardData } from '../../context/DashboardDataContext';
 import { useToast } from '../../context/ToastContext';
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
+import type {
+  DashboardTabParamList,
+  PracticeSection,
+} from '../../navigation/DashboardTabNavigator';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import {
@@ -98,6 +102,12 @@ export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) =>
   const contextData = useDashboardData();
   const toastContext = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  // Dashboard category cards pass an `initialCategory` param so the
+  // Practice tab opens scrolled to the right skill section. We read it
+  // here and clear it after consuming so the next press of the same
+  // category (or a return via the bottom tab bar) doesn't override
+  // whatever the user has since selected on this screen.
+  const route = useRoute<RouteProp<DashboardTabParamList, 'Practice'>>();
 
   const dashboardData     = props.dashboardData !== undefined ? props.dashboardData : contextData.dashboardData;
   const hasNotifications  = props.hasNotifications !== undefined ? props.hasNotifications : contextData.hasNotifications;
@@ -127,6 +137,25 @@ export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) =>
 
   // Selected category tab by name
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>('Speaking');
+
+  // Apply (and clear) the `initialCategory` param when the Home dashboard
+  // routes us here with a specific skill section. Clearing after consume
+  // means the same effect fires again on the next press even if the
+  // category value is unchanged — without it, React Navigation skips the
+  // params-change notification when the new value equals the old one.
+  useEffect(() => {
+    const next = route.params?.initialCategory;
+    if (!next) return;
+    const VALID: PracticeSection[] = ['Speaking', 'Writing', 'Reading', 'Listening'];
+    if (VALID.includes(next)) {
+      setSelectedCategoryName(next);
+    }
+    // `setParams` is shared by both stack and tab nav-props at runtime;
+    // we cast because the local `navigation` is typed for the parent stack.
+    (navigation as unknown as {
+      setParams: (params: { initialCategory?: PracticeSection }) => void;
+    }).setParams({ initialCategory: undefined });
+  }, [route.params?.initialCategory, navigation]);
 
   // ── Fetch: Categories + Tokens (parallel) ────────────────────────────────
   const fetchPracticeData = useCallback(async (isPullToRefresh = false) => {

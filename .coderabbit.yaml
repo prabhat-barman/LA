@@ -1,0 +1,129 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit AI config for LA (React Native + TypeScript)
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: en-US
+early_access: false
+
+reviews:
+  profile: chill            # "chill" = friendly tone, "assertive" = stricter nitpicks
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - master
+      - dev
+      - develop
+
+  # Block CodeRabbit from wasting tokens on generated / native build / vendor files
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/package-lock.json"
+    - "!**/yarn.lock"
+    - "!**/pnpm-lock.yaml"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/coverage/**"
+    - "!ios/Pods/**"
+    - "!ios/build/**"
+    - "!ios/DerivedData/**"
+    - "!ios/**/*.pbxproj"
+    - "!ios/**/xcuserdata/**"
+    - "!ios/**/project.xcworkspace/**"
+    - "!android/app/build/**"
+    - "!android/build/**"
+    - "!android/.gradle/**"
+    - "!android/.idea/**"
+    - "!**/*.lock"
+    - "!**/*.svg"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.mp4"
+    - "!**/*.mov"
+    - "!assets/videos/**"
+    - "!recordings/**"
+    - "!doc/**"
+
+  # Per-area instructions — write your project rules here
+  path_instructions:
+    - path: "src/**/*.{ts,tsx}"
+      instructions: |
+        - React Native 0.85 + React 19 + TypeScript strict.
+        - Prefer functional components and hooks; no class components.
+        - Flag any `any` type, unused vars, or missing `react-hooks/exhaustive-deps`.
+        - Styles must come from a `styles.ts` file (StyleSheet.create), not inline objects.
+        - Avoid `console.log` in production code (we strip it via babel-plugin-transform-remove-console, but still flag).
+        - Prefer absolute imports from `src/` when paths get deep.
+        - Side effects must go inside `useEffect`/`useCallback` with correct deps.
+
+    - path: "src/screens/**/*.{ts,tsx}"
+      instructions: |
+        - Screens should stay thin: heavy logic belongs in hooks/helpers, UI in components.
+        - Each screen folder should split into `index.tsx`, `styles.ts`, `types.ts`, `helpers.ts`, `components/`.
+        - Loading, empty, and error states must all be handled.
+
+    - path: "src/**/*.test.{ts,tsx}"
+      instructions: |
+        - Jest + @testing-library style. Prefer queries by role/text over testID where possible.
+        - Each test must have a clear arrange/act/assert structure.
+        - No snapshot tests without justification.
+
+    - path: "src/navigation/**/*.{ts,tsx}"
+      instructions: |
+        - React Navigation v7 (native-stack + bottom-tabs). Keep route param types in `types.ts`.
+        - Screen options should be co-located with the navigator.
+
+    - path: "ios/**/*.{m,mm,swift,h}"
+      instructions: |
+        - Native iOS changes — flag anything that could break the build, Podfile, or Info.plist.
+        - Watch for hardcoded bundle IDs, signing settings, or capabilities.
+
+    - path: "android/**/*.{java,kt,gradle}"
+      instructions: |
+        - Native Android changes — flag Gradle version bumps, AndroidManifest permission additions, and minSdk/targetSdk shifts.
+
+  # Tools we want CodeRabbit to run on every PR
+  tools:
+    eslint:
+      enabled: true
+    gitleaks:
+      enabled: true          # detect leaked API keys / secrets
+    markdownlint:
+      enabled: true
+    languagetool:
+      enabled: true
+    semgrep:
+      enabled: true
+    ast-grep:
+      enabled: false
+    actionlint:
+      enabled: true          # lint .github/workflows
+    yamllint:
+      enabled: true
+    checkov:
+      enabled: false
+    detekt:
+      enabled: false
+    rubocop:
+      enabled: false
+    swiftlint:
+      enabled: true           # lint Swift/ObjC files under ios/
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto              # learn from past PR reviews on this repo
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto

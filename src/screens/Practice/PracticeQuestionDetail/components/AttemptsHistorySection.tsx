@@ -19,6 +19,9 @@ interface Props {
   playingAttemptId: string | number | null;
   isAttemptPlaying: boolean;
   onToggleAttemptAudio: (attempt: any) => void;
+  // Forwarded to the attempts list so it can pick the MCQ row layout
+  // for cat 8/9/14/15. Optional — falls back to the speaking layout.
+  categoryId?: number;
 }
 
 export const AttemptsHistorySection: React.FC<Props> = ({
@@ -33,6 +36,7 @@ export const AttemptsHistorySection: React.FC<Props> = ({
   playingAttemptId,
   isAttemptPlaying,
   onToggleAttemptAudio,
+  categoryId,
 }) => (
   <View style={styles.logsSection}>
     <View style={styles.logsTabSwitcher}>
@@ -104,6 +108,7 @@ export const AttemptsHistorySection: React.FC<Props> = ({
         playingAttemptId={playingAttemptId}
         isAttemptPlaying={isAttemptPlaying}
         onToggleAttemptAudio={onToggleAttemptAudio}
+        categoryId={categoryId}
       />
     )}
   </View>

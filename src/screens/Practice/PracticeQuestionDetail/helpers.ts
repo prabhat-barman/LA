@@ -5,7 +5,83 @@ import {
   DIFFICULTY_CHIP_STYLES,
 } from './constants';
 import { SubscoreChecklistIcon } from './icons';
-import type { AttemptLog, SortFilter } from './types';
+import type { AttemptLog, MCQOption, SortFilter } from './types';
+
+// MCQ categories. Reading: 8 (single) / 9 (multi). Listening: 14 / 15.
+// We expose both so the screen can opt in to extra categories later
+// without spreading literal numbers across the codebase.
+const MCQ_SINGLE_CATEGORIES = new Set<number>([8, 14]);
+const MCQ_MULTI_CATEGORIES = new Set<number>([9, 15]);
+
+export const isMcqSingleCategory = (categoryId: number): boolean =>
+  MCQ_SINGLE_CATEGORIES.has(categoryId);
+
+export const isMcqMultipleCategory = (categoryId: number): boolean =>
+  MCQ_MULTI_CATEGORIES.has(categoryId);
+
+export const isMcqCategory = (categoryId: number): boolean =>
+  isMcqSingleCategory(categoryId) || isMcqMultipleCategory(categoryId);
+
+// MCQ options ship in raw insertion order ("D", "C", "B", "A" in the
+// reference sample). Sort by the leading letter so the UI always
+// reads A → B → C → … Options without a recognisable prefix fall back
+// to the backend `index` and then to their original position so we
+// never silently drop or shuffle malformed payloads.
+export const sortMcqOptions = <T extends MCQOption>(options: T[] | undefined): T[] => {
+  if (!Array.isArray(options) || options.length === 0) return [];
+  const withIndex = options.map((opt, i) => ({ opt, i }));
+  withIndex.sort((a, b) => {
+    const al = getOptionLeadingLetter(a.opt.options);
+    const bl = getOptionLeadingLetter(b.opt.options);
+    if (al !== null && bl !== null && al !== bl) return al - bl;
+    if (al !== null && bl === null) return -1;
+    if (al === null && bl !== null) return 1;
+    const ai = Number(a.opt.index ?? a.i);
+    const bi = Number(b.opt.index ?? b.i);
+    if (!isNaN(ai) && !isNaN(bi) && ai !== bi) return ai - bi;
+    return a.i - b.i;
+  });
+  return withIndex.map(({ opt }) => opt);
+};
+
+// Returns 0..25 for "A) …" / "B) …" / etc., or null if the text doesn't
+// start with a single ASCII letter followed by a separator. Tolerant of
+// stray whitespace and a few common separators (`)` / `.` / `:`).
+export const getOptionLeadingLetter = (text: string | undefined): number | null => {
+  if (!text) return null;
+  const m = text.trimStart().match(/^([A-Za-z])[).:\s]/);
+  if (!m) return null;
+  const code = m[1].toUpperCase().charCodeAt(0) - 65;
+  return code >= 0 && code < 26 ? code : null;
+};
+
+// Convert the backend `correct` flag (number, "1"/"0", boolean) into a bool.
+export const isOptionCorrect = (raw: unknown): boolean => {
+  if (raw === true || raw === 1) return true;
+  if (typeof raw === 'string') {
+    const s = raw.trim().toLowerCase();
+    return s === '1' || s === 'true' || s === 'yes';
+  }
+  return false;
+};
+
+// Parse the backend `answer` / `correct` field (option id string,
+// possibly comma-separated for multi-answer) into a Set<string> for
+// fast lookup. Whitespace and empty entries are dropped.
+export const parseSelectedOptionIds = (raw: unknown): Set<string> => {
+  if (raw == null) return new Set();
+  const flat = Array.isArray(raw) ? raw.join(',') : String(raw);
+  const ids = flat
+    .split(/[,;\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  return new Set(ids);
+};
+
+// Build the submit payload for the `answer` field. Backend expects a
+// comma-separated string of option ids (matches the legacy mobile clients).
+export const buildMcqAnswerPayload = (selectedIds: Iterable<string | number>): string =>
+  Array.from(selectedIds).map(String).filter(Boolean).join(',');
 
 // MM:SS clock formatter shared by recorder/playback UI.
 export const formatTime = (secs: number) => {
@@ -269,4 +345,19 @@ export const sortAttemptsBy = <T extends AttemptLog>(list: T[], filter: SortFilt
     return copy.sort((a, b) => attemptSortValue(b) - attemptSortValue(a));
   }
   return copy.sort((a, b) => attemptSortValue(a) - attemptSortValue(b));
+};
+
+export const cleanHtmlText = (html: string): string => {
+  if (!html) return '';
+  return html
+    .replace(/<p>/gi, '')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li>/gi, '• ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<ul>/gi, '')
+    .replace(/<\/ul>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .trim()
+    .replace(/\n{3,}/g, '\n\n');
 };

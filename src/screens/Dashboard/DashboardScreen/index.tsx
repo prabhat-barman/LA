@@ -10,8 +10,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { Header } from '../../../components/organisms/Header';
 import { CircularProgressBar } from '../../../components/atoms/CircularProgressBar';
@@ -31,6 +32,10 @@ import {
   TrianglePeakIcon,
 } from '../../../components/atoms/Icon';
 import { RootStackParamList } from '../../../navigation/AppNavigator';
+import type {
+  DashboardTabParamList,
+  PracticeSection,
+} from '../../../navigation/types';
 import { useDashboardData } from '../../../context/DashboardDataContext';
 import { useToast } from '../../../context/ToastContext';
 import { useUser } from '../../../context/UserContext';
@@ -60,9 +65,17 @@ import type {
   VideoSkillTab,
 } from './types';
 
+// Composed navigation prop: this screen sits inside the bottom tab
+// navigator (DashboardTabNavigator), which itself sits inside the root
+// stack. The composite type lets us call both `navigate('Practice', {...})`
+// (tab) and `navigate('Profile')` (stack) without casts.
+type DashboardScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<DashboardTabParamList, 'Home'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 export const DashboardScreen = () => {
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { showToast } = useToast();
   const {
     dashboardData,
@@ -107,11 +120,36 @@ export const DashboardScreen = () => {
     showToast('Class booked successfully!', 'success');
   }, [showToast]);
 
+  // Hand-off from dashboard CTAs (Today's Practice / Mock Test / category
+  // cards) to the bottom tab navigator. The composite navigation prop
+  // above lets `navigate` accept both tab routes (Practice/Mock) and
+  // root-stack routes (Profile, etc.) without runtime casts.
   const handlePractice = useCallback(
     (category: string) => {
-      showToast(`Navigating to ${category} section...`, 'success');
+      if (category === 'Mock Test') {
+        navigation.navigate('Mock');
+        return;
+      }
+
+      const PRACTICE_SECTIONS: PracticeSection[] = [
+        'Speaking',
+        'Writing',
+        'Reading',
+        'Listening',
+      ];
+      if (PRACTICE_SECTIONS.includes(category as PracticeSection)) {
+        navigation.navigate('Practice', {
+          initialCategory: category as PracticeSection,
+        });
+        return;
+      }
+
+      // "Today's Practice" and any other fallthrough just opens the
+      // Practice tab without forcing a section — the screen keeps its
+      // own last-selected section or defaults to Speaking.
+      navigation.navigate('Practice');
     },
-    [showToast],
+    [navigation],
   );
 
   const openVideo = useCallback(
@@ -353,7 +391,9 @@ export const DashboardScreen = () => {
               style={styles.actionButtonSecondary}
               onPress={() => handlePractice('Mock Test')}
             >
-              <Text style={styles.actionTextSecondary}>Start First Mock</Text>
+              <Text style={styles.actionTextSecondary}>
+                {mocks_practiced > 0 ? 'Continue Mock Test' : 'Start First Mock'}
+              </Text>
               <ChevronRightIcon size={scale(14)} color="#1A2151" />
             </TouchableOpacity>
           </View>

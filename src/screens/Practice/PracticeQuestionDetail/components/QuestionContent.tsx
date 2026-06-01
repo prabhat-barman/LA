@@ -10,15 +10,24 @@ import {
 } from 'react-native';
 import ImageView from 'react-native-image-viewing';
 import Svg, { Path } from 'react-native-svg';
+import { isMcqCategory, isMcqMultipleCategory } from '../helpers';
 import { styles } from '../styles';
 import { scale } from '../scale';
 import type { QuestionDetails } from '../types';
+import { MCQOptions } from './MCQOptions';
 
 interface Props {
   categoryId: number;
   questionDetails: QuestionDetails | null;
   questionText: string;
   resolveImageUrl: (img: string | undefined) => string;
+  // MCQ-only — supplied by the screen when categoryId is a Reading or
+  // Listening MCQ. `selectedOptionIds` is the live selection; `onToggleOption`
+  // mutates it. `showMcqFeedback` switches the option list into read-only
+  // post-submission mode (green / red highlights).
+  selectedOptionIds?: Set<string>;
+  onToggleOption?: (optionId: string) => void;
+  showMcqFeedback?: boolean;
 }
 
 // Detect the legacy `image` payload that occasionally arrives as a
@@ -226,12 +235,16 @@ const QuestionImage: React.FC<QuestionImageProps> = ({ uri, onTap }) => {
 };
 
 // Per-category prompt block: image (Describe Image, id 3) /
-// situation (Respond to a situation, id 21) / paragraph (Read Aloud, id 1).
+// situation (Respond to a situation, id 21) / paragraph (Read Aloud, id 1) /
+// reading passage + MCQ card (Multiple Choice, id 8 / 9 / 14 / 15).
 export const QuestionContent: React.FC<Props> = ({
   categoryId,
   questionDetails,
   questionText,
   resolveImageUrl,
+  selectedOptionIds,
+  onToggleOption,
+  showMcqFeedback,
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
 
@@ -287,7 +300,33 @@ export const QuestionContent: React.FC<Props> = ({
     );
   }
 
-  if (categoryId === 1 && questionText.length > 0) {
+  if (isMcqCategory(categoryId) && questionDetails) {
+    // For reading MCQs the passage lives in `questionText` (already
+    // HTML-stripped by the screen). Listening MCQs reuse this component
+    // too, but their "passage" is the transcript — which is hidden
+    // behind the Transcript pill, so we don't render it here.
+    const isReadingMcq = categoryId === 8 || categoryId === 9;
+    const prompt =
+      questionDetails.question_mcq ?? questionDetails.mcq_question ?? '';
+    return (
+      <>
+        {isReadingMcq && questionText.length > 0 && (
+          <Text style={styles.paragraphText}>{questionText}</Text>
+        )}
+        <View style={isReadingMcq ? styles.mcqDivider : undefined} />
+        <MCQOptions
+          questionPrompt={prompt}
+          options={questionDetails.option}
+          selectedIds={selectedOptionIds ?? new Set()}
+          onToggle={onToggleOption ?? (() => {})}
+          showFeedback={!!showMcqFeedback}
+          isMultiple={isMcqMultipleCategory(categoryId)}
+        />
+      </>
+    );
+  }
+
+  if ((categoryId === 1 || categoryId === 6 || categoryId === 7) && questionText.length > 0) {
     return <Text style={styles.paragraphText}>{questionText}</Text>;
   }
 

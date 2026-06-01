@@ -8,19 +8,21 @@ import React, {
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Linking,
   Platform,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import {
   RouteProp,
-  useFocusEffect,
   useNavigation,
   useRoute,
 } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../navigation/AppNavigator';
 import { TagIcon } from '../../../components/atoms/Icon';
@@ -34,10 +36,19 @@ import { isPteCore } from '../../../config/appVariantConfig';
 import Config from '../../../config/Config';
 import { Data, QUESTION_METADATA } from '../../../config/practiceData';
 import { useToast } from '../../../context/ToastContext';
+import { useRecorder } from '../../../context/RecorderContext';
 import { useAudioPlayer } from '../../../hooks/practiceMedia';
 import { tagColorStore } from '../../../utils/tagColorStore';
 import { TAG_COLOR_HEX } from './constants';
-import { normalizeDifficulty, sortAttemptsBy } from './helpers';
+import {
+  buildMcqAnswerPayload,
+  cleanHtmlText,
+  isMcqCategory,
+  isMcqMultipleCategory,
+  isOptionCorrect,
+  normalizeDifficulty,
+  sortAttemptsBy,
+} from './helpers';
 import { scale } from './scale';
 import { styles } from './styles';
 import type {
@@ -79,6 +90,38 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<PracticeQuestionDetailRouteProp>();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isFixedInputFocused, setIsFixedInputFocused] = useState(false);
+  const fixedInputRef = useRef<TextInput | null>(null);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setIsKeyboardVisible(true)
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+        setIsFixedInputFocused(false);
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isKeyboardVisible && fixedInputRef.current) {
+      const t = setTimeout(() => {
+        fixedInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [isKeyboardVisible]);
 
   const {
     questionId: initialQuestionId,
@@ -111,6 +154,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
   const renderPhase = usePhasedRender(currentIndex);
   const mediaConsoleRef = useRef<MediaConsoleRef | null>(null);
+  const mediaFlow = useRecorder();
 
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [recordingDurationSec, setRecordingDurationSec] = useState<number>(0);
@@ -122,6 +166,52 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     },
     [],
   );
+
+  const [typedResponse, setTypedResponse] = useState<string>('');
+  const wordCount = useMemo(() => {
+    const trimmed = typedResponse.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).length;
+  }, [typedResponse]);
+
+  const isWritingCategory = categoryId === 6 || categoryId === 7;
+  const isMcq = isMcqCategory(categoryId);
+  const isMcqMulti = isMcqMultipleCategory(categoryId);
+  const [writingTimeLeft, setWritingTimeLeft] = useState<number>(0);
+  const formattedWritingTime = useMemo(() => {
+    const m = Math.floor(writingTimeLeft / 60);
+    const s = writingTimeLeft % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  }, [writingTimeLeft]);
+
+  // MCQ selection state. We model it as a Set<string> so single-answer
+  // (cat 8/14) and multi-answer (cat 9/15) share a single representation —
+  // single just keeps the set at size 0 or 1. Option ids are coerced to
+  // strings because that's the shape the backend expects in the `answer`
+  // payload (and also what `attempted[].answer` stores in history rows).
+  const [selectedOptionIds, setSelectedOptionIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const handleToggleOption = useCallback(
+    (optionId: string) => {
+      setSelectedOptionIds(prev => {
+        if (isMcqMulti) {
+          const next = new Set(prev);
+          if (next.has(optionId)) next.delete(optionId);
+          else next.add(optionId);
+          return next;
+        }
+        // Single-answer: tapping the same option deselects it; tapping a
+        // different one replaces the previous pick.
+        if (prev.has(optionId) && prev.size === 1) return new Set();
+        return new Set([optionId]);
+      });
+    },
+    [isMcqMulti],
+  );
+
+
 
   // Bookmarking / coloured tagging. The store is the source of truth so the
   // list screen reflects the latest value the moment we navigate back.
@@ -272,13 +362,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
   const questionText = useMemo(() => {
     if (!questionDetails) return '';
-    return (
+    const rawText =
       questionDetails.paragraph ??
       questionDetails.question ??
       questionDetails.text ??
       questionDetails.q_text ??
-      ''
-    );
+      '';
+    return cleanHtmlText(rawText);
   }, [questionDetails]);
 
   // Voice variants attached to this question (e.g. Lily / Clara / William
@@ -392,6 +482,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       setTranslationText(null);
       setScoreResult(null);
       setIsSubmitting(false);
+      setTypedResponse('');
+      setIsFixedInputFocused(false);
+      setSelectedOptionIds(new Set());
       setAttempts([]);
       setOthersAttempts([]);
       // Drop any voice selection from the previous question — the
@@ -520,21 +613,28 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, currentQuestionId]);
 
-  // Tear down all audio when navigating away. samplePlayer / attemptAudio
-  // expose stable callbacks but eslint can't infer that, so we suppress the
-  // exhaustive-deps warning to keep the cleanup running exactly once on
-  // every focus/blur cycle.
-  useFocusEffect(
-    useCallback(
-      () => () => {
-        mediaConsoleRef.current?.reset().catch(() => {});
-        samplePlayer.stop().catch(() => {});
-        attemptAudio.stop();
-      },
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [],
-    ),
-  );
+  const mediaFlowRef = useRef(mediaFlow);
+  mediaFlowRef.current = mediaFlow;
+  const samplePlayerRef = useRef(samplePlayer);
+  samplePlayerRef.current = samplePlayer;
+  const attemptAudioRef = useRef(attemptAudio);
+  attemptAudioRef.current = attemptAudio;
+
+  // Tear down all audio when navigating away or when the screen unmounts.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      mediaFlowRef.current.reset().catch(() => {});
+      samplePlayerRef.current.stop().catch(() => {});
+      attemptAudioRef.current.stop();
+    });
+    return () => {
+      unsubscribe();
+      mediaFlowRef.current.reset().catch(() => {});
+      samplePlayerRef.current.stop().catch(() => {});
+      attemptAudioRef.current.stop();
+    };
+  }, [navigation]);
+
 
   const submitReport = useCallback(async () => {
     if (!selectedReason) {
@@ -568,9 +668,26 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   }, [additionalDetails, currentQuestionId, selectedReason, showToast]);
 
   const submitAnswer = useCallback(async () => {
-    if (!recordedUri) {
-      showToast('Please record your voice first.', 'error');
-      return;
+    if (isMcq) {
+      if (selectedOptionIds.size === 0) {
+        showToast(
+          isMcqMulti
+            ? 'Please select at least one option.'
+            : 'Please select an option.',
+          'error',
+        );
+        return;
+      }
+    } else if (isWritingCategory) {
+      if (!typedResponse.trim()) {
+        showToast('Please type your response first.', 'error');
+        return;
+      }
+    } else {
+      if (!recordedUri) {
+        showToast('Please record your voice first.', 'error');
+        return;
+      }
     }
     await samplePlayer.stop();
     attemptAudio.stop();
@@ -590,7 +707,8 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       formData.append('device', 'mobile');
       formData.append('isPlatform', Platform.OS);
 
-      const recordDuration = recordingDurationSec;
+      // MCQ has no audio recording, so duration is always 0.
+      const recordDuration = isWritingCategory || isMcq ? 0 : recordingDurationSec;
       const m = Math.floor(recordDuration / 60);
       const s = Math.floor(recordDuration % 60);
       const durationStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
@@ -599,7 +717,14 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       const strategyVal =
         categoryId === 1 ? (selectedMode === 'Normal' ? '1' : '2') : '1';
       formData.append('strategy', strategyVal);
-      formData.append('answer', '');
+
+      let answerValue = '';
+      if (isMcq) {
+        answerValue = buildMcqAnswerPayload(selectedOptionIds);
+      } else if (isWritingCategory) {
+        answerValue = typedResponse;
+      }
+      formData.append('answer', answerValue);
 
       let submitText = '';
       let submitScript = '';
@@ -607,7 +732,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         submitText = questionText;
         submitScript =
           questionDetails?.script ?? questionDetails?.audio_script ?? '';
-      } else if (categoryId === 3) {
+      } else if (categoryId === 3 || isMcq) {
         submitText = '';
         submitScript = '';
       } else {
@@ -623,34 +748,64 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       formData.append('text', submitText);
       formData.append('script', submitScript);
 
-      const correctSampleAnswer =
-        questionDetails?.answer ??
-        questionDetails?.model_answer ??
-        questionDetails?.sample_answer ??
-        '';
+      // For MCQ we send the canonical correct option id(s) so the backend
+      // can score regardless of whether it re-reads the question. Mirrors
+      // what `attempted[].correct` stores in history rows.
+      const correctSampleAnswer = isMcq
+        ? buildMcqAnswerPayload(
+            (questionDetails?.option ?? [])
+              .filter(o => Number(o.correct) === 1)
+              .map(o => o.id),
+          )
+        : questionDetails?.answer ??
+          questionDetails?.model_answer ??
+          questionDetails?.sample_answer ??
+          '';
       formData.append('q_ans', correctSampleAnswer);
 
-      let fileUri = recordedUri;
-      if (Platform.OS === 'android') {
-        const cleanPath = fileUri.replace(/^file:\/\//, '').replace(/^\/+/, '');
-        fileUri = `file:///${cleanPath}`;
-      }
+      if (!isWritingCategory && !isMcq && recordedUri) {
+        let fileUri = recordedUri;
+        if (Platform.OS === 'android') {
+          const cleanPath = fileUri.replace(/^file:\/\//, '').replace(/^\/+/, '');
+          fileUri = `file:///${cleanPath}`;
+        }
 
-      const fileObj = {
-        uri: fileUri,
-        type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
-        name:
-          Platform.OS === 'ios'
-            ? `sound-${currentQuestionId}.m4a`
-            : `sound-${currentQuestionId}.mp4`,
-      };
-      formData.append('file', fileObj as any);
+        const fileObj = {
+          uri: fileUri,
+          type: Platform.OS === 'ios' ? 'audio/m4a' : 'audio/mp4',
+          name:
+            Platform.OS === 'ios'
+              ? `sound-${currentQuestionId}.m4a`
+              : `sound-${currentQuestionId}.mp4`,
+        };
+        formData.append('file', fileObj as any);
+      }
 
       const res = await apiClient.post(endpoint, formData);
       const data = res.data?.data ?? res.data ?? {};
 
       setScoreResult(data);
-      setScoreModalVisible(true);
+
+      if (isMcq) {
+        // MCQ doesn't open the score modal — inline option highlights on the
+        // question card already convey correctness, and a lightweight toast
+        // confirms submission without the heavy subscore breakdown screen
+        // used for speaking/writing tasks.
+        const correctOpts = (questionDetails?.option ?? []).filter(o =>
+          isOptionCorrect(o.correct),
+        );
+        const correctIdSet = new Set(correctOpts.map(o => String(o.id)));
+        const allCorrectPicked =
+          correctIdSet.size > 0 &&
+          selectedOptionIds.size === correctIdSet.size &&
+          Array.from(selectedOptionIds).every(id => correctIdSet.has(id));
+        showToast(
+          allCorrectPicked ? 'Correct answer!' : 'Incorrect answer',
+          allCorrectPicked ? 'success' : 'error',
+        );
+      } else {
+        setScoreModalVisible(true);
+      }
 
       fetchHistoryAttempts(currentQuestionId, activeHistoryTab);
     } catch (err: any) {
@@ -669,13 +824,63 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     currentQuestionId,
     fetchHistoryAttempts,
     isCore,
+    isMcq,
+    isMcqMulti,
+    isWritingCategory,
     questionDetails,
     questionText,
     recordedUri,
     recordingDurationSec,
     samplePlayer,
     selectedMode,
+    selectedOptionIds,
     showToast,
+    typedResponse,
+  ]);
+
+  const submitAnswerRef = useRef(submitAnswer);
+  submitAnswerRef.current = submitAnswer;
+
+  // Countdown timer for Writing categories. The timer must not fire a
+  // second submit after the user has already submitted manually (the
+  // backend would reject the dupe and the score modal would flicker).
+  // We guard by short-circuiting the effect when `isSubmitting` /
+  // `scoreResult` flip on, *and* re-checking inside the tick handler
+  // for the (rare) race where the user submits between two ticks.
+  useEffect(() => {
+    if (!isWritingCategory || !metadata.timeLimitSec || loading) {
+      setWritingTimeLeft(0);
+      return;
+    }
+    if (isSubmitting || scoreResult) {
+      setWritingTimeLeft(0);
+      return;
+    }
+    setWritingTimeLeft(metadata.timeLimitSec);
+
+    const interval = setInterval(() => {
+      setWritingTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          // Re-check at fire time; state captured in closure could be
+          // stale if a manual submit landed in the last tick window.
+          if (!isSubmitting && !scoreResult) {
+            submitAnswerRef.current();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [
+    currentIndex,
+    isWritingCategory,
+    metadata.timeLimitSec,
+    loading,
+    isSubmitting,
+    scoreResult,
   ]);
 
   // Coloured Tagging. Maps a picker color to its visible hex value used on
@@ -843,7 +1048,10 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       ) : (
         <ScrollView
           style={styles.contentScroll}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            isWritingCategory && isKeyboardVisible && styles.writingContentKeyboardPadding,
+          ]}
           showsVerticalScrollIndicator={false}
         >
           <QuestionMetaBlock
@@ -866,31 +1074,69 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               questionDetails={questionDetails}
               questionText={questionText}
               resolveImageUrl={resolveImageUrl}
+              selectedOptionIds={selectedOptionIds}
+              onToggleOption={handleToggleOption}
+              showMcqFeedback={isMcq && !!scoreResult}
             />
 
-            {renderPhase >= 3 ? (
-              <LocalErrorBoundary errorMessage="Failed to initialize audio console.">
-                <MediaConsole
-                  ref={mediaConsoleRef}
-                  metadata={metadata}
-                  isCore={isCore}
-                  questionAudioUrl={questionAudioUrl}
-                  questionDetailsLoaded={!!questionDetails}
-                  selectedMode={selectedMode}
-                  categoryId={categoryId}
-                  isSubmitting={isSubmitting}
-                  availableVoices={availableVoices}
-                  selectedVoiceLabel={selectedVoiceLabel}
-                  onSelectVoice={handleSelectVoice}
-                  onRecordedUriChange={handleRecordedUriChange}
-                  onError={handleMediaError}
+            {isWritingCategory && (
+              <View
+                style={[
+                  styles.writingContainer,
+                  isFixedInputFocused && styles.writingContainerCollapsed,
+                ]}
+              >
+                {writingTimeLeft > 0 && !isFixedInputFocused && (
+                  <View style={styles.timerRow}>
+                    <Text style={styles.timerLabel}>Time Left: </Text>
+                    <Text style={styles.timerValue}>{formattedWritingTime}</Text>
+                  </View>
+                )}
+                <TextInput
+                  style={[
+                    styles.writingTextInput,
+                    isFixedInputFocused && styles.writingTextInputCollapsed,
+                  ]}
+                  multiline
+                  placeholder="Write your response here..."
+                  placeholderTextColor="#8E8E93"
+                  value={typedResponse}
+                  onChangeText={setTypedResponse}
+                  textAlignVertical="top"
                 />
-              </LocalErrorBoundary>
-            ) : (
-              <View style={styles.consolePlaceholder}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.placeholderText}>Preparing audio controls...</Text>
+                {!isFixedInputFocused && (
+                  <Text style={styles.wordCountText}>
+                    TOTAL WORD COUNT: {wordCount}
+                  </Text>
+                )}
               </View>
+            )}
+
+            {!isWritingCategory && !isMcq && (
+              renderPhase >= 3 ? (
+                <LocalErrorBoundary errorMessage="Failed to initialize audio console.">
+                  <MediaConsole
+                    ref={mediaConsoleRef}
+                    metadata={metadata}
+                    isCore={isCore}
+                    questionAudioUrl={questionAudioUrl}
+                    questionDetailsLoaded={!!questionDetails}
+                    selectedMode={selectedMode}
+                    categoryId={categoryId}
+                    isSubmitting={isSubmitting}
+                    availableVoices={availableVoices}
+                    selectedVoiceLabel={selectedVoiceLabel}
+                    onSelectVoice={handleSelectVoice}
+                    onRecordedUriChange={handleRecordedUriChange}
+                    onError={handleMediaError}
+                  />
+                </LocalErrorBoundary>
+              ) : (
+                <View style={styles.consolePlaceholder}>
+                  <ActivityIndicator size="small" color="#007AFF" />
+                  <Text style={styles.placeholderText}>Preparing audio controls...</Text>
+                </View>
+              )
             )}
 
             {renderPhase >= 4 ? (
@@ -929,6 +1175,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   positionMs={samplePlayer.positionMs}
                   durationMs={samplePlayer.durationMs}
                   onTogglePlay={handleToggleSampleAudio}
+                  categoryId={categoryId}
                 />
 
                 <CardFooter
@@ -956,10 +1203,41 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               playingAttemptId={attemptAudio.playingId}
               isAttemptPlaying={attemptAudio.isPlaying}
               onToggleAttemptAudio={attemptAudio.toggle}
+              categoryId={categoryId}
             />
           )}
         </ScrollView>
       )}
+
+      {isWritingCategory && isKeyboardVisible && !loading && renderPhase >= 2 && (
+        <View style={[styles.fixedWritingContainer, { bottom: scale(64) + insets.bottom }]}>
+          <View style={styles.timerAndWordCountRow}>
+            {writingTimeLeft > 0 ? (
+              <View style={styles.fixedTimerRow}>
+                <Text style={styles.timerLabel}>Time Left: </Text>
+                <Text style={styles.timerValue}>{formattedWritingTime}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
+            <Text style={styles.fixedWordCountText}>
+              Words: {wordCount}
+            </Text>
+          </View>
+          <TextInput
+            ref={fixedInputRef}
+            style={styles.fixedWritingTextInput}
+            multiline
+            placeholder="Write your response here..."
+            placeholderTextColor="#8E8E93"
+            value={typedResponse}
+            onChangeText={setTypedResponse}
+            textAlignVertical="top"
+            onFocus={() => setIsFixedInputFocused(true)}
+          />
+        </View>
+      )}
+
 
       <HiddenAttemptAudioWebView
         source={attemptAudio.source}
@@ -973,23 +1251,34 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       <NavigationFooter
         isFirst={currentIndex === 0}
         isLast={currentIndex === questionsList.length - 1}
-        hasRecording={!!recordedUri}
+        hasRecording={
+          isMcq
+            ? selectedOptionIds.size > 0
+            : isWritingCategory
+            ? !!typedResponse.trim()
+            : !!recordedUri
+        }
         isSubmitting={isSubmitting}
         hasSubmitted={!!scoreResult}
         onPrev={handlePrevQuestion}
         onNext={handleNextQuestion}
         onSubmit={submitAnswer}
+        onShowScore={() => setScoreModalVisible(true)}
+        submittedLabel={isMcq ? 'Submitted' : 'Score Info'}
+        submittedReadOnly={isMcq}
       />
 
-      <ScoreResultModal
-        visible={scoreModalVisible}
-        onClose={handleScoreModalClose}
-        scoreResult={scoreResult}
-        overallRawAndMax={overallRawAndMax}
-        overallPercentage={overallPercentage}
-        resolvedSubscores={resolvedSubscores}
-        wordsListToShow={wordsListToShow}
-      />
+      {!isMcq && (
+        <ScoreResultModal
+          visible={scoreModalVisible}
+          onClose={handleScoreModalClose}
+          scoreResult={scoreResult}
+          overallRawAndMax={overallRawAndMax}
+          overallPercentage={overallPercentage}
+          resolvedSubscores={resolvedSubscores}
+          wordsListToShow={wordsListToShow}
+        />
+      )}
 
       <ReportIssueModal
         visible={reportModalVisible}

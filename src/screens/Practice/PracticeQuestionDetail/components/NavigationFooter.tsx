@@ -2,7 +2,6 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from '../../../../components/atoms/Icon';
@@ -18,12 +17,20 @@ interface Props {
   onPrev: () => void;
   onNext: () => void;
   onSubmit: () => void;
+  onShowScore?: () => void;
+  // Label shown on the submit button after submission. Defaults to
+  // "Score Info" (re-opens score modal). Pass "Submitted" for flows like
+  // MCQ that don't have a re-openable result screen.
+  submittedLabel?: string;
+  // When true, the submitted-state button is rendered as a static label
+  // (no press handler) – used for MCQ where there's nothing to reopen.
+  submittedReadOnly?: boolean;
 }
 
 // Submit button has three visual states:
 //   1. Idle / disabled - no recording yet (greyed out)
 //   2. Active green   - recording present, ready to submit
-//   3. Submitted      - score already received for this question
+//   3. Submitted      - score already received for this question, becomes clickable "Score Info"
 export const NavigationFooter: React.FC<Props> = ({
   isFirst,
   isLast,
@@ -33,9 +40,18 @@ export const NavigationFooter: React.FC<Props> = ({
   onPrev,
   onNext,
   onSubmit,
+  onShowScore,
+  submittedLabel = 'Score Info',
+  submittedReadOnly = false,
 }) => {
   const insets = useSafeAreaInsets();
-  const isDisabled = !hasRecording || isSubmitting || hasSubmitted;
+  const isDisabled = isSubmitting || (!hasSubmitted && !hasRecording);
+  // Submitted CTA is only actionable when the parent both opts in
+  // (`submittedReadOnly === false`) AND wires up an `onShowScore` handler.
+  // Without this guard the button would render enabled but tap into a
+  // no-op when callers forgot to pass `onShowScore`.
+  const canShowScore = !submittedReadOnly && typeof onShowScore === 'function';
+  const submittedTapHandler = canShowScore ? onShowScore : undefined;
   return (
     <View style={[styles.navigationFooter, { paddingBottom: insets.bottom, height: scale(64) + insets.bottom }]}>
       <TouchableOpacity
@@ -56,17 +72,17 @@ export const NavigationFooter: React.FC<Props> = ({
       <TouchableOpacity
         style={[
           styles.navFooterSubmitBtn,
-          isDisabled && !hasSubmitted && styles.navFooterSubmitBtnDisabled,
+          !hasSubmitted && isDisabled && styles.navFooterSubmitBtnDisabled,
           hasSubmitted && styles.navFooterSubmitBtnSubmitted,
+          hasSubmitted && !canShowScore && styles.navFooterSubmitBtnDisabled,
         ]}
-        onPress={onSubmit}
-        disabled={isDisabled}
-        activeOpacity={hasSubmitted ? 1 : 0.7}
+        onPress={hasSubmitted ? submittedTapHandler : onSubmit}
+        disabled={(!hasSubmitted && isDisabled) || (hasSubmitted && !canShowScore)}
+        activeOpacity={0.7}
       >
         {hasSubmitted ? (
           <View style={styles.navFooterSubmitContent}>
-            <Text style={styles.navFooterSubmitText}>Submitted</Text>
-            <CheckIcon size={scale(14)} color="#FFFFFF" strokeWidth={3} />
+            <Text style={styles.navFooterSubmitText}>{submittedLabel}</Text>
           </View>
         ) : (
           <Text style={styles.navFooterSubmitText}>

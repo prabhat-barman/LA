@@ -1081,4 +1081,290 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#007AFF',
   },
+  writingContainer: {
+    width: '100%',
+    marginVertical: scale(10),
+  },
+  // Applied to the question scroll's contentContainerStyle on writing
+  // categories when the keyboard is up — gives the inline TextInput
+  // enough room to scroll above the docked fixed keyboard bar.
+  writingContentKeyboardPadding: {
+    paddingBottom: scale(230),
+  },
+  // Collapses the inline writing container when the docked
+  // (`fixedWritingContainer`) input has focus so the two inputs don't
+  // visually duplicate the user's text.
+  writingContainerCollapsed: {
+    height: 0,
+    opacity: 0,
+    overflow: 'hidden',
+    marginVertical: 0,
+  },
+  writingTextInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: scale(12),
+    padding: scale(12),
+    fontSize: scale(13),
+    fontFamily: 'BricolageGrotesque-Regular',
+    minHeight: scale(150),
+    maxHeight: scale(250),
+    color: '#1C1F2A',
+    backgroundColor: '#FAFAFA',
+    textAlignVertical: 'top',
+  },
+  // Sibling of `writingContainerCollapsed` — flattens the inline
+  // TextInput itself so it occupies zero visual space.
+  writingTextInputCollapsed: {
+    height: 0,
+    padding: 0,
+    borderWidth: 0,
+  },
+  wordCountText: {
+    fontSize: scale(11),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#8E8E93',
+    marginTop: scale(8),
+    textAlign: 'right',
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginBottom: scale(8),
+    gap: scale(4),
+  },
+  timerLabel: {
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#8E8E93',
+  },
+  timerValue: {
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#FF9500', // Orange color for urgency
+  },
+  fixedWritingContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+    paddingHorizontal: scale(16),
+    paddingTop: scale(8),
+    paddingBottom: scale(12),
+    zIndex: 5,
+  },
+  timerAndWordCountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: scale(6),
+  },
+  fixedTimerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fixedWordCountText: {
+    fontSize: scale(11.5),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#8E8E93',
+  },
+  fixedWritingTextInput: {
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    borderRadius: scale(10),
+    padding: scale(10),
+    fontSize: scale(13),
+    fontFamily: 'BricolageGrotesque-Regular',
+    minHeight: scale(45),
+    maxHeight: scale(150),
+    color: '#1C1F2A',
+    backgroundColor: '#FAFAFA',
+    textAlignVertical: 'top',
+  },
+  // ---------------------------------------------------------------------
+  // MCQ (Reading / Listening Multiple Choice) styles. Mirrors the green
+  // bordered card from the reference screen — passage above, the options
+  // card below, with feedback colouring applied after submission.
+  // ---------------------------------------------------------------------
+  mcqDivider: {
+    height: 1,
+    backgroundColor: '#E5E5EA',
+    marginVertical: scale(14),
+  },
+  mcqCard: {
+    borderWidth: 1.5,
+    borderColor: '#94C23C',
+    borderRadius: scale(12),
+    padding: scale(12),
+    backgroundColor: '#FAFFF3',
+  },
+  mcqPromptText: {
+    fontSize: scale(14),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#1C1F2A',
+    lineHeight: scale(20),
+    marginBottom: scale(12),
+  },
+  mcqOptionsList: {
+    gap: scale(8),
+  },
+  mcqOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: scale(10),
+    paddingVertical: scale(10),
+    paddingHorizontal: scale(10),
+    borderRadius: scale(8),
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  mcqOptionRowSelected: {
+    borderColor: '#34C759',
+    backgroundColor: '#EBF8EF',
+  },
+  mcqOptionRowCorrect: {
+    borderColor: '#34C759',
+    backgroundColor: '#E1F5E5',
+  },
+  mcqOptionRowWrong: {
+    borderColor: '#FF3B30',
+    backgroundColor: '#FDECEB',
+  },
+  mcqOptionRowMissed: {
+    borderColor: '#34C759',
+    borderStyle: 'dashed',
+    backgroundColor: '#F4FBEE',
+  },
+  mcqOptionText: {
+    flex: 1,
+    fontSize: scale(13),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#1C1F2A',
+    lineHeight: scale(18),
+  },
+  mcqCheckbox: {
+    width: scale(20),
+    height: scale(20),
+    borderRadius: scale(4),
+    borderWidth: 2,
+    borderColor: '#C7C7CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: scale(1),
+  },
+  mcqRadio: {
+    width: scale(20),
+    height: scale(20),
+    borderRadius: scale(10),
+    borderWidth: 2,
+    borderColor: '#C7C7CC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: scale(1),
+  },
+  // Filled indicator variants for MCQOptions. Composed over the base
+  // checkbox/radio styles; covers the three "filled" states the row
+  // surfaces — neutral selected, post-submit correct/missed (both green),
+  // and post-submit wrong (red).
+  mcqIndicatorFilledGreen: {
+    backgroundColor: '#34C759',
+    borderColor: '#34C759',
+  },
+  mcqIndicatorFilledRed: {
+    backgroundColor: '#FF3B30',
+    borderColor: '#FF3B30',
+  },
+  mcqEmptyState: {
+    padding: scale(16),
+    backgroundColor: '#FAFAFA',
+    borderRadius: scale(10),
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    alignItems: 'center',
+  },
+  mcqEmptyText: {
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#8E8E93',
+  },
+  // Attempt list row variant — shows option text + correct/wrong badge.
+  mcqAttemptOptionText: {
+    fontSize: scale(11.5),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#48484A',
+    marginTop: scale(4),
+    lineHeight: scale(15),
+  },
+  mcqAttemptBadge: {
+    paddingHorizontal: scale(8),
+    paddingVertical: scale(3),
+    borderRadius: scale(10),
+    minWidth: scale(56),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Composed over `mcqAttemptBadge` to colour the pill green (correct)
+  // or red (wrong) without resorting to an inline backgroundColor.
+  mcqAttemptBadgeCorrect: {
+    backgroundColor: '#34C759',
+  },
+  mcqAttemptBadgeWrong: {
+    backgroundColor: '#FF3B30',
+  },
+  mcqAttemptBadgeText: {
+    fontSize: scale(10),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  // Result modal blocks — re-uses the speaking modal frame but with its
+  // own row layout for the user's selection and the correct answer.
+  mcqResultBlock: {
+    marginBottom: scale(16),
+  },
+  mcqResultSectionLabel: {
+    fontSize: scale(11),
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    color: '#8E8E93',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: scale(8),
+  },
+  mcqResultRow: {
+    paddingVertical: scale(10),
+    paddingHorizontal: scale(12),
+    borderRadius: scale(8),
+    borderWidth: 1,
+    marginBottom: scale(6),
+  },
+  mcqResultRowCorrect: {
+    borderColor: '#34C759',
+    backgroundColor: '#EBF8EF',
+  },
+  mcqResultRowWrong: {
+    borderColor: '#FF3B30',
+    backgroundColor: '#FDECEB',
+  },
+  mcqResultRowText: {
+    fontSize: scale(13),
+    fontFamily: 'BricolageGrotesque-Medium',
+    color: '#1C1F2A',
+    lineHeight: scale(18),
+  },
+  mcqResultEmpty: {
+    fontSize: scale(12),
+    fontFamily: 'BricolageGrotesque-Regular',
+    color: '#8E8E93',
+    fontStyle: 'italic',
+  },
 });

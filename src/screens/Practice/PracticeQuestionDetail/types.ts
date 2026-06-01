@@ -16,6 +16,22 @@ export interface QuestionAudioVariant {
   question_id?: number | string;
 }
 
+/**
+ * Multiple-choice option attached to a Reading / Listening MCQ question.
+ * The backend ships these unsorted (raw insertion order), so callers must
+ * sort by the leading letter (`A)`, `B)` …) before rendering.
+ *
+ * `correct` is `0`/`1` — for single-answer (cat 8/14) only one option is `1`;
+ * for multi-answer (cat 9/15) multiple can be `1`.
+ */
+export interface MCQOption {
+  id: number | string;
+  question_id?: number | string;
+  options: string;
+  correct: number | string;
+  index?: number;
+}
+
 export interface QuestionDetails {
   id: string | number;
   title?: string;
@@ -23,6 +39,11 @@ export interface QuestionDetails {
   question_title?: string;
   name?: string;
   question?: string;
+  question_mcq?: string;
+  // Legacy alias for `question_mcq` returned by older endpoints. Newer
+  // responses use `question_mcq`; keep both so the screen can fall back
+  // without a runtime cast.
+  mcq_question?: string;
   text?: string;
   q_text?: string;
   paragraph?: string;
@@ -51,6 +72,7 @@ export interface QuestionDetails {
   script?: string;
   media_link?: string;
   question_audios?: QuestionAudioVariant[];
+  option?: MCQOption[];
 }
 
 export interface AttemptLog {
@@ -65,6 +87,19 @@ export interface AttemptLog {
   fluency?: any;
   pronunciation?: any;
   content?: any;
+  // MCQ-only fields. `answer` holds the selected option id(s) as a
+  // string (comma-separated for multi-answer); `correct` holds the
+  // canonical correct id(s); `html` is the displayable option text the
+  // user picked. These travel through `SHOW_HISTORY` for cat 8/9/14/15.
+  answer?: string;
+  correct?: string;
+  html?: string;
+  type?: number | string;
+  // Present on the "Other students' attempts" feed (`SHOW_HISTORY`'s
+  // `others` branch). Shape varies — sometimes an object, sometimes a
+  // single-element array — so consumers route it through
+  // `getAttemptUserName` which handles both.
+  user?: unknown;
 }
 
 export interface ScoreResult {

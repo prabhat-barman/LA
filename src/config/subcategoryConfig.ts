@@ -7,6 +7,7 @@ export interface QuestionMetadata {
   recordingDuration: number;
   nextButtonBehavior: string;
   pteCoreWaitTimeBeforeRecording?: number;
+  timeLimitSec?: number;
 }
 
 export const QUESTION_METADATA: QuestionMetadata[] = [
@@ -63,7 +64,8 @@ export const QUESTION_METADATA: QuestionMetadata[] = [
     "hasAudio": false,
     "waitTimeBeforeRecording": 0,
     "recordingDuration": 0,
-    "nextButtonBehavior": "enable"
+    "nextButtonBehavior": "enable",
+    "timeLimitSec": 600
   },
   {
     "id": 7,
@@ -72,7 +74,8 @@ export const QUESTION_METADATA: QuestionMetadata[] = [
     "hasAudio": false,
     "waitTimeBeforeRecording": 0,
     "recordingDuration": 0,
-    "nextButtonBehavior": "enable"
+    "nextButtonBehavior": "enable",
+    "timeLimitSec": 1200
   },
   {
     "id": 8,

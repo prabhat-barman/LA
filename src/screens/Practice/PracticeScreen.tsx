@@ -13,9 +13,14 @@ import { colors } from '../../theme/colors';
 import { isPteCore, getPdfPath } from '../../config/appVariantConfig';
 import { useDashboardData } from '../../context/DashboardDataContext';
 import { useToast } from '../../context/ToastContext';
-import { useNavigation } from '@react-navigation/native';
+import { CompositeNavigationProp, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
+import type {
+  DashboardTabParamList,
+  PracticeSection,
+} from '../../navigation/types';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import {
@@ -94,10 +99,25 @@ interface PracticeScreenProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
+// Composed nav: PracticeScreen is a tab inside DashboardTabNavigator,
+// which sits inside the root stack. Combining both lets us call
+// `navigation.setParams({ initialCategory: undefined })` (tab-aware) and
+// `navigation.navigate('PracticeCommonList', ...)` (stack) without casts.
+type PracticeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<DashboardTabParamList, 'Practice'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
 export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) => {
   const contextData = useDashboardData();
   const toastContext = useToast();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<PracticeScreenNavigationProp>();
+  // Dashboard category cards pass an `initialCategory` param so the
+  // Practice tab opens scrolled to the right skill section. We read it
+  // here and clear it after consuming so the next press of the same
+  // category (or a return via the bottom tab bar) doesn't override
+  // whatever the user has since selected on this screen.
+  const route = useRoute<RouteProp<DashboardTabParamList, 'Practice'>>();
 
   const dashboardData     = props.dashboardData !== undefined ? props.dashboardData : contextData.dashboardData;
   const hasNotifications  = props.hasNotifications !== undefined ? props.hasNotifications : contextData.hasNotifications;
@@ -127,6 +147,23 @@ export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) =>
 
   // Selected category tab by name
   const [selectedCategoryName, setSelectedCategoryName] = useState<string>('Speaking');
+
+  // Apply (and clear) the `initialCategory` param when the Home dashboard
+  // routes us here with a specific skill section. Clearing after consume
+  // means the same effect fires again on the next press even if the
+  // category value is unchanged — without it, React Navigation skips the
+  // params-change notification when the new value equals the old one.
+  useEffect(() => {
+    const next = route.params?.initialCategory;
+    if (!next) return;
+    const VALID: PracticeSection[] = ['Speaking', 'Writing', 'Reading', 'Listening'];
+    if (VALID.includes(next)) {
+      setSelectedCategoryName(next);
+    }
+    // Composite nav prop carries the Practice tab's param shape, so
+    // setParams is type-checked against DashboardTabParamList['Practice'].
+    navigation.setParams({ initialCategory: undefined });
+  }, [route.params?.initialCategory, navigation]);
 
   // ── Fetch: Categories + Tokens (parallel) ────────────────────────────────
   const fetchPracticeData = useCallback(async (isPullToRefresh = false) => {
@@ -185,7 +222,7 @@ export const PracticeScreen: React.FC<Partial<PracticeScreenProps>> = (props) =>
   // ── Navigate to Question List ──────────────────────────────────────────────
   const handlePracticeNow = (sub: ApiSubcategory) => {
     try {
-      (navigation as any).navigate('PracticeCommonList', {
+      navigation.navigate('PracticeCommonList', {
         categoryId:     sub.id,
         categoryName:   isCore ? (sub.pte_core_title ?? sub.title) : sub.title,
         parentCategory: selectedCategoryName,

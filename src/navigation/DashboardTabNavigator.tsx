@@ -27,13 +27,10 @@ const INACTIVE_W = scale(50);
 const ACTIVE_W   = scale(114);
 const TAB_H      = scale(46);
 
-export type DashboardTabParamList = {
-  Home: undefined;
-  Practice: undefined;
-  Mock: undefined;
-  Videos: undefined;
-  Menu: undefined;
-};
+import type { DashboardTabParamList, PracticeSection } from './types';
+
+// Re-export so existing consumers that import from this module keep working.
+export type { DashboardTabParamList, PracticeSection };
 
 const Tab = createBottomTabNavigator<DashboardTabParamList>();
 

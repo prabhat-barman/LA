@@ -32,6 +32,67 @@ const extractList = (data: unknown): unknown[] => {
 // just-completed mock without a manual pull-to-refresh.
 export const PAST_MOCKS_QUERY_KEY = ['past-mocks'] as const;
 
+// Dedupe key — same shape every consumer uses for React `key` props
+// + the `byKey` Map exposed below. Keeping the format in one place
+// means a future "include mockId as a number-vs-string union" change
+// is a single-line edit.
+const dedupeKey = (m: PastMock): string =>
+  `${m.variant}-${String(m.mockId)}`;
+
+// Picks the "better" of two duplicate PastMock records. Order:
+//   1. Prefer the one with a non-null `overall` (graded beats pending).
+//   2. Prefer the one with MORE populated section scores (Full Mock
+//      results sometimes split across multiple rows on the backend
+//      and the row with the full breakdown is more useful).
+//   3. Otherwise prefer the existing (first-seen) record — stable
+//      ordering for unchanged data.
+// Called from `dedupePastMocks`. Pure — easy to test.
+const pickRicherPastMock = (existing: PastMock, incoming: PastMock): PastMock => {
+  if (existing.overall != null && incoming.overall == null) return existing;
+  if (existing.overall == null && incoming.overall != null) return incoming;
+  const existingSections = Object.keys(existing.sectionScores ?? {}).length;
+  const incomingSections = Object.keys(incoming.sectionScores ?? {}).length;
+  if (incomingSections > existingSections) return incoming;
+  return existing;
+};
+
+// Removes records with duplicate `(variant, mockId)` keys, preferring
+// the richer record per `pickRicherPastMock`. Backend endpoints
+// occasionally return the same mock twice (overlapping pagination,
+// or the same mock crossing the standard + extensive lists). Letting
+// dupes through poisons three places downstream:
+//   • React renders both children with the same `key` and warns,
+//     then may omit / duplicate one (unsupported behaviour).
+//   • `computeProgressStats` averages over the duplicated rows,
+//     skewing avg / best / total.
+//   • `computeSectionStats` double-counts the section scores from
+//     the dupe, distorting per-section trend charts.
+// Dedup at the data source plugs all three at once.
+export const dedupePastMocks = (mocks: PastMock[]): PastMock[] => {
+  const seen = new Map<string, PastMock>();
+  let dupeCount = 0;
+  for (const m of mocks) {
+    const key = dedupeKey(m);
+    const existing = seen.get(key);
+    if (existing) {
+      dupeCount += 1;
+      seen.set(key, pickRicherPastMock(existing, m));
+    } else {
+      seen.set(key, m);
+    }
+  }
+  if (__DEV__ && dupeCount > 0) {
+    // Surface the backend duplication in dev so it gets noticed and
+    // (eventually) fixed at the source. Silenced in prod — users
+    // shouldn't see infrastructure noise, and the dedup itself is
+    // already protecting them from the consequences.
+    logger.warn(
+      `[usePastMocks] dropped ${dupeCount} duplicate past-mock record(s) — backend returned the same (variant, mockId) more than once`,
+    );
+  }
+  return Array.from(seen.values());
+};
+
 // React Query hook that fetches both the standard and extensive
 // past-mock lists in parallel. Same shape as `usePendingMocks` —
 // merged into one normalized array, each entry carrying its own
@@ -80,18 +141,22 @@ export const usePastMocks = () => {
         );
       }
 
+      // Dedup BEFORE sort. Sort order then operates on the unique
+      // set so a duplicate doesn't sneak in as a tie-breaker.
+      const deduped = dedupePastMocks(merged);
+
       // Sort newest-first by completion date so the most recently
       // finished mock is the leftmost card in the rail (best
       // matches user mental model: "show me my latest result").
       // Entries without timestamps sink to the end — stable
       // relative to each other.
-      merged.sort((a, b) => {
+      deduped.sort((a, b) => {
         const aTime = a.submittedAtIso ? Date.parse(a.submittedAtIso) : 0;
         const bTime = b.submittedAtIso ? Date.parse(b.submittedAtIso) : 0;
         return bTime - aTime;
       });
 
-      return merged;
+      return deduped;
     },
     staleTime: 60 * 1000,
     gcTime: 5 * 60 * 1000,
@@ -105,7 +170,7 @@ export const usePastMocks = () => {
   const byKey = useMemo(() => {
     const map = new Map<string, PastMock>();
     for (const p of query.data ?? []) {
-      map.set(`${p.variant}-${String(p.mockId)}`, p);
+      map.set(dedupeKey(p), p);
     }
     return map;
   }, [query.data]);

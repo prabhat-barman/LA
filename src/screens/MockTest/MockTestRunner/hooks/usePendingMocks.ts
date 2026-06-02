@@ -27,6 +27,32 @@ const extractPendingList = (data: unknown): unknown[] => {
 
 const PENDING_QUERY_KEY = ['pending-mocks'] as const;
 
+// Dedupe pending mocks by `(variant, mockId)`. Same backend-shape
+// concern as `usePastMocks` — overlapping pagination or the same
+// mock appearing across both endpoints would otherwise cause:
+//   • React `key` collisions in the In Progress rail.
+//   • Stale-vs-fresh `lastSavedAtIso` confusion (the dup picked
+//     last wins, which may overwrite the more-recent save state).
+// Last-write-wins is fine here — backend dupes from a single
+// session should carry identical save state; in the rare case
+// where they differ, the later record is more likely to reflect
+// the user's current attempt.
+export const dedupePendingMocks = (mocks: PendingMock[]): PendingMock[] => {
+  const seen = new Map<string, PendingMock>();
+  let dupeCount = 0;
+  for (const m of mocks) {
+    const key = `${m.variant}-${String(m.mockId)}`;
+    if (seen.has(key)) dupeCount += 1;
+    seen.set(key, m);
+  }
+  if (__DEV__ && dupeCount > 0) {
+    logger.warn(
+      `[usePendingMocks] dropped ${dupeCount} duplicate pending-mock record(s) — backend returned the same (variant, mockId) more than once`,
+    );
+  }
+  return Array.from(seen.values());
+};
+
 // React Query hook that fetches *both* the standard and extensive
 // pending-mock lists in parallel and merges them into one normalized
 // array. The two-endpoint split mirrors the MockTestScreen's existing
@@ -77,7 +103,7 @@ export const usePendingMocks = () => {
         );
       }
 
-      return merged;
+      return dedupePendingMocks(merged);
     },
     // Short stale time — pending state changes whenever the user
     // saves & exits or finalizes a test, and the In Progress rail

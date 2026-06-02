@@ -46,9 +46,15 @@ export default function HeadsetCheckPlayer({
 
   useEffect(() => {
     isMounted.current = true;
-    setIsLoading(Boolean(audioUrl));
-    
-    // Cleanup playback listeners on unmount
+    // NOTE: do NOT pre-flip `isLoading` to true just because we have
+    // a URL — `Sound.startPlayer` isn't called until the user taps
+    // play, and the play button is `disabled={isLoading}`, so a true
+    // initial value would lock the user out indefinitely (the listener
+    // that would flip it back only runs after startPlayer succeeds).
+    // Loading is set inside `toggle()` instead, gated on the actual
+    // network/disk fetch.
+    setIsLoading(false);
+
     return () => {
       isMounted.current = false;
       setIsPlaying(false);

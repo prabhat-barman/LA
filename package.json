@@ -36,6 +36,7 @@
     "react-native-nitro-modules": "^0.35.0",
     "react-native-nitro-sound": "^0.2.14",
     "react-native-permissions": "^5.4.4",
+    "react-native-render-html": "^6.3.4",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.25.0",
     "react-native-svg": "^15.15.5",

@@ -1,4 +1,4 @@
-import { StyleSheet, Platform, Dimensions } from 'react-native';
+import { StyleSheet, Dimensions } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
 const scale = (size: number) => (screenWidth / 375) * size;
@@ -9,7 +9,9 @@ export default StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: scale(16),
-    paddingTop: Platform.OS === 'ios' ? scale(50) : scale(20),
+    // `paddingTop` is provided by the Header component at runtime so it
+    // can respect the device's actual status-bar / notch / Dynamic Island
+    // inset. Don't add a paddingTop here or it will be overridden.
     paddingBottom: scale(15),
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,

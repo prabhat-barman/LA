@@ -124,6 +124,14 @@ export const DashboardScreen = () => {
   // cards) to the bottom tab navigator. The composite navigation prop
   // above lets `navigate` accept both tab routes (Practice/Mock) and
   // root-stack routes (Profile, etc.) without runtime casts.
+  //
+  // Category cards (Speaking/Writing/Reading/Listening) deep-link into
+  // the dedicated Progress Tracker stack screen instead of switching to
+  // the Practice tab — the Practice tab is the "go practice now" surface
+  // while the Progress Tracker is the "see how I'm doing" surface, and
+  // the visual "View >" affordance + counts on the dashboard card maps
+  // cleanly to the latter. "Today's Practice" still opens the Practice
+  // tab.
   const handlePractice = useCallback(
     (category: string) => {
       if (category === 'Mock Test') {
@@ -138,8 +146,8 @@ export const DashboardScreen = () => {
         'Listening',
       ];
       if (PRACTICE_SECTIONS.includes(category as PracticeSection)) {
-        navigation.navigate('Practice', {
-          initialCategory: category as PracticeSection,
+        navigation.navigate('ProgressTracker', {
+          initialSkill: category as PracticeSection,
         });
         return;
       }

@@ -20,7 +20,6 @@ import { theme } from '../../theme';
 import { all, CountryData } from 'country-codes-list';
 import { validateName, validateEmail, validatePhone } from '../../utils/validation';
 import { signInWithGoogle, signInWithApple } from '../../services/socialAuthService';
-import { markJustLoggedIn } from '../../services/loginFlag';
 import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 
@@ -149,7 +148,6 @@ const SignUpScreen = () => {
   const handleGoogleSignIn = async () => {
     const res = await signInWithGoogle();
     if (res.success) {
-      await markJustLoggedIn();
       showToast('Google registration successful!', 'success');
       navigation.navigate('Dashboard');
     } else {
@@ -160,7 +158,6 @@ const SignUpScreen = () => {
   const handleAppleSignIn = async () => {
     const res = await signInWithApple();
     if (res.success) {
-      await markJustLoggedIn();
       showToast('Apple registration successful!', 'success');
       navigation.navigate('Dashboard');
     } else {

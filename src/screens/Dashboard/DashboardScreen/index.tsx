@@ -47,8 +47,11 @@ import {
   trackEvent,
   trackScreen,
 } from '../../../services/analytics';
-import { consumeJustLoggedIn } from '../../../services/loginFlag';
 import { initializeNotifications } from '../../../services/notificationService';
+import {
+  markPopupVideoShownToday,
+  shouldShowPopupVideoToday,
+} from '../../../services/popupVideoStorage';
 import { TOUR_KEYS } from '../../../services/tourStorage';
 import { SmartVideoPlayer } from '../../Videos/SmartVideoPlayer';
 import { FeedbackModal } from '../FeedbackModal';
@@ -140,12 +143,12 @@ export const DashboardScreen = () => {
     trackEvent(AnalyticsEvents.AppOpen);
   }, []);
 
-  // Post-login welcome popup. Fires once per sign-in if (a) we
-  // landed here via the just-logged-in marker the auth flow drops,
-  // and (b) the dashboard payload contains a non-empty
-  // `popup_video.youtube_vid`. Wrapped in a `popupShownRef` guard
-  // so a dashboard re-fetch (e.g. focus refresh) doesn't reopen the
-  // modal mid-session.
+  // App-launch welcome popup. Fires at most once per day when the
+  // dashboard payload carries a non-empty `popup_video.youtube_vid`.
+  // The `popupShownRef` guards against dashboard refetches (focus
+  // refresh) reopening the modal in the same session; the per-day
+  // AsyncStorage marker handles the same suppression across cold
+  // starts.
   useEffect(() => {
     if (popupShownRef.current) return;
     const raw =
@@ -155,9 +158,10 @@ export const DashboardScreen = () => {
       (dashboardData?.popup_video?.youtube_vid as string | undefined);
     if (!raw) return;
     (async () => {
-      const justLoggedIn = await consumeJustLoggedIn();
-      if (!justLoggedIn) return;
+      const ok = await shouldShowPopupVideoToday();
+      if (!ok) return;
       popupShownRef.current = true;
+      await markPopupVideoShownToday();
       // Backend sometimes returns an id, sometimes a full URL —
       // SmartVideoPlayer accepts either via its `videoUrl` prop
       // (it has a youtube-id extractor), so normalise to a URL.

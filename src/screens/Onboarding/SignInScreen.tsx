@@ -20,7 +20,6 @@ import apiClient from '../../services/apiClient';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import { setItem } from '../../utils/secureStorage';
 import { signInWithGoogle, signInWithApple } from '../../services/socialAuthService';
-import { markJustLoggedIn } from '../../services/loginFlag';
 
 // Common Components
 import AuthTemplate from '../../components/templates/AuthTemplate/AuthTemplate';
@@ -68,7 +67,6 @@ const SignInScreen = () => {
       if (response.data && response.data.access_token) {
         await setItem('user_token', response.data.access_token);
         await setItem('user_data', JSON.stringify(response.data.user || {}));
-        await markJustLoggedIn();
         showToast('Logged in successfully!', 'success');
         navigation.navigate('Dashboard');
       } else {
@@ -83,7 +81,6 @@ const SignInScreen = () => {
   const handleGoogleSignIn = async () => {
     const res = await signInWithGoogle();
     if (res.success) {
-      await markJustLoggedIn();
       showToast('Google login successful!', 'success');
       navigation.navigate('Dashboard');
     } else {
@@ -94,7 +91,6 @@ const SignInScreen = () => {
   const handleAppleSignIn = async () => {
     const res = await signInWithApple();
     if (res.success) {
-      await markJustLoggedIn();
       showToast('Apple login successful!', 'success');
       navigation.navigate('Dashboard');
     } else {

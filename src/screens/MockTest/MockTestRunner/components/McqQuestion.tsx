@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { MCQOptions } from '../../../Practice/PracticeQuestionDetail/components/MCQOptions';
 import type { MCQOption } from '../../../Practice/PracticeQuestionDetail/types';
 import { styles } from '../styles';
@@ -92,7 +93,10 @@ export const McqQuestion: React.FC<Props> = ({
   return (
     <View style={styles.mcqWrapper}>
       {question.paragraph && (
-        <Text style={styles.questionParagraph}>{question.paragraph}</Text>
+        <HtmlText
+          content={question.paragraph}
+          style={styles.questionParagraph}
+        />
       )}
       <MCQOptions
         questionPrompt={question.prompt ?? ''}

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { styles } from '../styles';
 import type { AnswerDraft, Question } from '../types';
 
@@ -85,7 +86,7 @@ export const ReorderQuestion: React.FC<Props> = ({
   return (
     <View style={styles.reorderContainer}>
       {question.prompt ? (
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       ) : null}
 
       <Text style={styles.reorderHelper}>

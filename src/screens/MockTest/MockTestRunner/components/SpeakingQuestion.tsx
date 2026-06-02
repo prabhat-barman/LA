@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Image, View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { AutoPlayAudioRecorder } from '../../../../modules/audio';
 import { styles } from '../styles';
 import type { AnswerDraft, Question, SubcategoryId } from '../types';
@@ -78,7 +79,7 @@ export const SpeakingQuestion: React.FC<Props> = ({
         />
       )}
       {showPrompt && (
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       )}
       <AutoPlayAudioRecorder
         // `componentKey` ties recorder internal state to a specific

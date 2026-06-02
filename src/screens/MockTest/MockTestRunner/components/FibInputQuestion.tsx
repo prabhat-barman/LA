@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { Text, TextInput, View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { AudioPlayer } from '../../../../modules/audio';
 import { styles } from '../styles';
 import type { AnswerDraft, Question } from '../types';
@@ -68,7 +69,7 @@ export const FibInputQuestion: React.FC<Props> = ({
   return (
     <View style={styles.fibContainer}>
       {question.prompt && fib.parts.join('').trim().length === 0 ? (
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       ) : null}
 
       {audioUrl.length > 0 ? (

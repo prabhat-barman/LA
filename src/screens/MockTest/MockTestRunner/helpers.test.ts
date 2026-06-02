@@ -1,5 +1,7 @@
 import {
+  buildFinalMockClosePayload,
   buildQueueItemId,
+  buildRemainingQuesPayload,
   buildSelectedString,
   buildSubmitPayload,
   buildInterleavedFibSelected,
@@ -1434,6 +1436,101 @@ describe('MockTestRunner helpers', () => {
       expect(shouldOfferOptionalBreak('Reading', 'Listening', 'extensive')).toBe(
         false,
       );
+    });
+  });
+
+  // FormData has no public iteration so we spy on `append` and collect
+  // the args — same pattern as the buildSubmitPayload suite above.
+  const captureBulkAppends = () => {
+    const calls: { key: string; value: unknown }[] = [];
+    const spy = jest
+      .spyOn(FormData.prototype, 'append')
+      .mockImplementation((key: string, value: unknown) => {
+        calls.push({ key, value });
+      });
+    const all = (key: string): string[] =>
+      calls.filter(c => c.key === key).map(c => String(c.value));
+    const last = (key: string): string | undefined => all(key).at(-1);
+    return { spy, all, last };
+  };
+
+  describe('buildRemainingQuesPayload', () => {
+    it('builds the expected scalar fields for a single skipped question', () => {
+      const { spy, last } = captureBulkAppends();
+      buildRemainingQuesPayload({
+        mockId: 42,
+        questionIds: [101],
+        remainingTotalSeconds: 90,
+      });
+      expect(last('mock_id')).toBe('42');
+      expect(last('skip')).toBe('1');
+      expect(last('time')).toBe('90');
+      expect(last('id[]')).toBe('101');
+      spy.mockRestore();
+    });
+
+    it('emits one id[] entry per skipped question in input order', () => {
+      const { spy, all, last } = captureBulkAppends();
+      buildRemainingQuesPayload({
+        mockId: 'mock-7',
+        questionIds: [3, '4b', 5],
+        remainingTotalSeconds: 0,
+      });
+      expect(all('id[]')).toEqual(['3', '4b', '5']);
+      expect(last('mock_id')).toBe('mock-7');
+      spy.mockRestore();
+    });
+
+    it('coerces non-integer / negative seconds to a non-negative integer', () => {
+      const { spy: spy1, last: last1 } = captureBulkAppends();
+      buildRemainingQuesPayload({
+        mockId: 1,
+        questionIds: [1],
+        remainingTotalSeconds: -12.7,
+      });
+      expect(last1('time')).toBe('0');
+      spy1.mockRestore();
+
+      const { spy: spy2, last: last2 } = captureBulkAppends();
+      buildRemainingQuesPayload({
+        mockId: 1,
+        questionIds: [1],
+        remainingTotalSeconds: 30.9,
+      });
+      expect(last2('time')).toBe('30');
+      spy2.mockRestore();
+    });
+
+    it('accepts an empty id list (caller decides whether to send)', () => {
+      const { spy, all, last } = captureBulkAppends();
+      buildRemainingQuesPayload({
+        mockId: 1,
+        questionIds: [],
+        remainingTotalSeconds: 0,
+      });
+      expect(all('id[]')).toEqual([]);
+      expect(last('mock_id')).toBe('1');
+      spy.mockRestore();
+    });
+  });
+
+  describe('buildFinalMockClosePayload', () => {
+    it('contains only mock_id with a numeric mockId', () => {
+      const { spy, all, last } = captureBulkAppends();
+      buildFinalMockClosePayload(99);
+      expect(last('mock_id')).toBe('99');
+      // No other keys are emitted — the close signal is intentionally
+      // minimal. The legacy backend pulls everything else from the
+      // previously-submitted answers.
+      expect(all('mock_id')).toHaveLength(1);
+      spy.mockRestore();
+    });
+
+    it('stringifies string mock ids unchanged', () => {
+      const { spy, last } = captureBulkAppends();
+      buildFinalMockClosePayload('m-abc');
+      expect(last('mock_id')).toBe('m-abc');
+      spy.mockRestore();
     });
   });
 });

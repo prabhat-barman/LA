@@ -851,3 +851,60 @@ export const buildSubmitPayload = (ctx: SubmitContext): FormData => {
 
   return fd;
 };
+
+// ─── Bulk skip-remaining + final close payloads ─────────────────────────────
+//
+// The runner used to satisfy "unanswered tail on section timeout" by
+// enqueueing N individual SUBMIT_MOCK posts. The legacy PHP backend
+// also exposes two purpose-built endpoints:
+//
+//   • REMAINING_MOCK  ("set/mockTime")  — one POST that marks an
+//     array of question ids as skipped. Faster + atomic from the
+//     server's POV than 30 separate per-question submissions on a
+//     timeout. Old-app name: `submitRemainingQuesAPI`.
+//
+//   • SUBMIT_FAILED_MOCK ("submitFailed/mock") — fire-and-forget
+//     close signal sent after the user has finished posting all
+//     per-question answers. Tells the grader the attempt is done so
+//     scoring can run without waiting for a timeout. Old-app name:
+//     `submitFailedMockAPI`.
+//
+// Both helpers below build the multipart payload only — the actual
+// `apiClient.post(...)` lives in the runner. Keeping the helpers
+// pure means they're test-friendly and the runner stays in charge of
+// when to call them.
+
+// Builds the multipart payload for REMAINING_MOCK. The old app sends
+// `mock_id`, `id[]` (PHP-style repeated), `skip`, and `time`. We mirror
+// that shape exactly so the backend's existing parser accepts it
+// without changes.
+export const buildRemainingQuesPayload = (params: {
+  mockId: number | string;
+  questionIds: ReadonlyArray<number | string>;
+  remainingTotalSeconds: number;
+}): FormData => {
+  const { mockId, questionIds, remainingTotalSeconds } = params;
+  const fd = new FormData();
+  fd.append('mock_id', String(mockId));
+  // `skip=1` matches the legacy "these questions were not answered,
+  // mark them skipped" contract. The old app sometimes used `2` when
+  // the call was triggered by a completed-section boundary rather
+  // than a timeout; we use `1` uniformly since both cases end up
+  // marking the questions skipped and the server doesn't branch on
+  // the value beyond truthiness today.
+  fd.append('skip', '1');
+  fd.append('time', String(Math.max(0, Math.floor(remainingTotalSeconds))));
+  for (const id of questionIds) {
+    fd.append('id[]', String(id));
+  }
+  return fd;
+};
+
+// Builds the multipart payload for SUBMIT_FAILED_MOCK. The old app
+// only sends `mock_id` — the call is a pure "test done" signal, the
+// server pulls everything else from the previously-submitted answers.
+export const buildFinalMockClosePayload = (mockId: number | string): FormData => {
+  const fd = new FormData();
+  fd.append('mock_id', String(mockId));
+  return fd;
+};

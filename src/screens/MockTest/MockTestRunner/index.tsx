@@ -13,13 +13,17 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../../../navigation/AppNavigator';
 import { useToast } from '../../../context/ToastContext';
+import { API_ENDPOINTS } from '../../../config/apiConfig';
+import apiClient from '../../../services/apiClient';
 import { logger } from '../../../services/logger';
 import { QuestionRouter } from './components/QuestionRouter';
 import { RunnerFooter } from './components/RunnerFooter';
 import { SectionBreakOverlay } from './components/SectionBreakOverlay';
 import { SubmissionRetryOverlay } from './components/SubmissionRetryOverlay';
 import {
+  buildFinalMockClosePayload,
   buildQueueItemId,
+  buildRemainingQuesPayload,
   findSectionIndexForQuestion,
   formatRemainingTime,
   getSection,
@@ -273,6 +277,14 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
   // success or surfaces the retry overlay on partial failure. The
   // runner is no longer responsible for the post-submit toast —
   // showing the score IS the success confirmation.
+  //
+  // Final close signal: once every per-question submission has
+  // succeeded, fire a fire-and-forget POST to SUBMIT_FAILED_MOCK
+  // (`submitFailed/mock`). The legacy backend uses this as the
+  // "attempt is done, run the grader" trigger; without it, scoring
+  // would only kick off when the server-side timer expires. Failure
+  // here is non-blocking — the score will still appear on the next
+  // result-screen refresh once the backend eventually grades.
   const finalizeAndExit = useCallback(async () => {
     setIsFinalSubmitting(true);
     const result = await submitQueue.flush();
@@ -286,6 +298,20 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
     queryClient.invalidateQueries({ queryKey: PENDING_MOCKS_QUERY_KEY });
     queryClient.invalidateQueries({ queryKey: PAST_MOCKS_QUERY_KEY });
     if (result.allSucceeded) {
+      apiClient
+        .post(API_ENDPOINTS.SUBMIT_FAILED_MOCK, buildFinalMockClosePayload(mockId))
+        .then(() => {
+          logger.info('[MockTestRunner] final close signal posted', { mockId });
+        })
+        .catch(err => {
+          logger.warn(
+            '[MockTestRunner] final close signal failed (grading will fall back to server-side timer)',
+            {
+              mockId,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          );
+        });
       // Phase 2.2 — explicit clear in addition to the useEffect-based
       // clear in useSubmitQueue. The effect would fire from the
       // post-flush state change anyway, but the runner navigates away
@@ -313,6 +339,20 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
       queryClient.invalidateQueries({ queryKey: PENDING_MOCKS_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: PAST_MOCKS_QUERY_KEY });
       if (result.allSucceeded) {
+        // Mirror the clean finalize path's close-signal too — without
+        // it the backend's grader would still wait out the server-side
+        // timer for any mock that exited via the retry overlay.
+        apiClient
+          .post(API_ENDPOINTS.SUBMIT_FAILED_MOCK, buildFinalMockClosePayload(mockId))
+          .catch(err => {
+            logger.warn(
+              '[MockTestRunner] final close signal failed after retry',
+              {
+                mockId,
+                error: err instanceof Error ? err.message : String(err),
+              },
+            );
+          });
         // Same destination as the clean finalize path — close the
         // overlay first so the result screen doesn't render with
         // the overlay still mounted underneath.
@@ -437,6 +477,17 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
   // dies — would leave gaps that the final `complete=1` post can't
   // patch over.
   //
+  // Dual-write strategy (matches the legacy 4-API contract):
+  //   1. Fire ONE bulk POST to REMAINING_MOCK (`set/mockTime`) with
+  //      the array of remaining ids. This is the cheap path the
+  //      legacy backend was designed for — N=30 unanswered tail
+  //      becomes 1 network round-trip instead of 30.
+  //   2. Also enqueue each id individually via the submit queue so
+  //      the retry / persistence machinery still has per-item
+  //      visibility. If the bulk call fails outright (rare — the
+  //      backend's parser ignores duplicate skips) the per-item
+  //      submissions will still cover the tail.
+  //
   // We enqueue from `currentIndex + 1` through the section's
   // `endIndex` inclusive. The CURRENT question is intentionally
   // skipped because the caller (`handleNext` / `handleExpire`)
@@ -445,12 +496,14 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
   const flushUnansweredSectionTail = useCallback(
     (sectionRange: { startIndex: number; endIndex: number }) => {
       if (!session) return;
+      const remainingQuestionIds: (number | string)[] = [];
       for (
         let idx = currentIndex + 1;
         idx <= sectionRange.endIndex && idx < session.questions.length;
         idx += 1
       ) {
         const q = session.questions[idx];
+        remainingQuestionIds.push(q.id);
         const draft = answers[String(q.id)] ?? EMPTY_DRAFT;
         const ctx = buildSubmitContext({
           index: idx,
@@ -465,6 +518,35 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
           });
         }
       }
+      if (remainingQuestionIds.length === 0) return;
+      const bulkPayload = buildRemainingQuesPayload({
+        mockId,
+        questionIds: remainingQuestionIds,
+        remainingTotalSeconds: remainingSecRef.current,
+      });
+      // Fire-and-forget — the per-item queue above is the
+      // source-of-truth for retry / persistence. We only log if the
+      // bulk call fails because (a) it's optional defense in depth
+      // and (b) the legacy URL `set/mockTime` may not be wired on
+      // every backend deployment.
+      apiClient
+        .post(API_ENDPOINTS.REMAINING_MOCK, bulkPayload)
+        .then(() => {
+          logger.info('[MockTestRunner] bulk skip-remaining posted', {
+            mockId,
+            count: remainingQuestionIds.length,
+          });
+        })
+        .catch(err => {
+          logger.warn(
+            '[MockTestRunner] bulk skip-remaining failed (per-item queue still active)',
+            {
+              mockId,
+              count: remainingQuestionIds.length,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          );
+        });
     },
     [answers, buildSubmitContext, currentIndex, mockId, session, submitQueue],
   );

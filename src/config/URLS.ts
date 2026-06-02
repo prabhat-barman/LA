@@ -1,134 +1,166 @@
 import { BASE_URL } from "./Config";
 
+// ─── URL catalogue ──────────────────────────────────────────────────────────
+//
+// This file is the single source of truth for every backend path the
+// React Native app talks to. Resolution happens via the Proxy in
+// `apiConfig.ts` (`API_ENDPOINTS.<KEY>` → `buildUrl(KEY)` →
+// `resolvePath(KEY)` → `URLS[KEY]` prefixed with the active base URL).
+//
+// Inline status annotations help spot dead weight during refactors:
+//
+//   USED      — referenced via `API_ENDPOINTS.<KEY>` somewhere in src/
+//   PTE-CORE  — auto-picked by `resolvePath()` for the PTE Core
+//               variant when its non-prefixed sibling is accessed
+//   UNUSED    — defined here but never referenced; safe to delete
+//               once we're sure no native module reads it
+//   FUTURE    — feature isn't built yet but the endpoint is reserved
+//
+// When you wire a new feature, please update the annotation on the key
+// you start using so this stays accurate.
+//
+// Audit summary (last updated Jun 2026):
+//   61 USED · 3 PTE-CORE · 17 UNUSED   (total: 81)
+//   — 22 per-question-type constants removed (replaced by dynamic
+//     `LIST_QUESTION/{categoryId}` calls)
+//   — REMAINING_MOCK + SUBMIT_FAILED_MOCK wired into MockTestRunner
+//     for legacy 4-API parity (bulk-skip + final close signal)
+//   — 7 exact-URL duplicates removed (GOOGLE_SOCIAL_LOGIN,
+//     APPLE_SOCIAL_LOGIN, MOCK_TUTOR_FEEDBACK, MOCK_VIEW_FEEDBACK,
+//     REPORT_QUESTION, PROGRESS_DETAIL, DELETE_NOTIFICATION)
+//
+// ────────────────────────────────────────────────────────────────────────────
+
 const URLS: Record<string, string> = {
-  // Common Keys
-  REQUEST_OTP: "requestotp",
-  PAYMENT_STATUS: "process/in-app/payment",
-  VERIFY_IOS_IAP: "process/ios/in-app/payment",
-  MOCK_TEST_LIST: "web/mock1?new_format=0",
-  MOCK_TEST_DETAIL: "question/detail",
-  EXTENSIVE_MOCK_TEST_LIST: "web/mock1?new_format=1",
-  PENDING_TEST_LIST: "pending/mock?new_format=0",
-  EXTENSIVE_PENDING_TEST_LIST: "pending/mock?new_format=1",
-  SIGN_IN: "login",
-  LOGOUT: "logout",
-  SIGN_UP: "app/signup",
-  SEND_SIGN_UP: "app/send/otp",
-  VERIFY_EMAIL_PHONE: "user-validation",
-  FORGOTPASSWORD: "forgot",
-  RESET_FORGOTPASSWORD: "reset-password",
-  DEVICE_TOKEN: "deviceToken",
-  DEVICE_TOKEN_USER: "deviceToken/user",
-  GOOGLE_SOCIAL_LOGIN: "googleSignUp",
-  APPLE_SOCIAL_LOGIN: "appleSignUp",
-  GOOGLE_LOGIN: "googleSignUp",
-  APPLE_LOGIN: "appleSignUp",
-  PREDICTION_COUNT: "/prediction/count",
+  // ── Auth / Onboarding ──────────────────────────────────────────────────
+  REQUEST_OTP: "requestotp",                       // USED — OTP / Change-password
+  PAYMENT_STATUS: "process/in-app/payment",        // USED — IAP (Android)
+  VERIFY_IOS_IAP: "process/ios/in-app/payment",    // USED — IAP (iOS)
+  SIGN_IN: "login",                                // USED — SignInScreen
+  LOGOUT: "logout",                                // USED — ProfileScreen
+  SIGN_UP: "app/signup",                           // USED — SignUpScreen
+  SEND_SIGN_UP: "app/send/otp",                    // USED — SignUpScreen
+  VERIFY_EMAIL_PHONE: "user-validation",           // USED — OTPScreen
+  FORGOTPASSWORD: "forgot",                        // USED — ForgotPasswordScreen
+  RESET_FORGOTPASSWORD: "reset-password",          // USED — NewPasswordScreen
+  DEVICE_TOKEN: "deviceToken",                     // USED — DashboardDataContext / ProfileScreen
+  DEVICE_TOKEN_USER: "deviceToken/user",           // UNUSED
+  GOOGLE_LOGIN: "googleSignUp",                    // USED — socialAuthService
+  APPLE_LOGIN: "appleSignUp",                      // USED — socialAuthService
+  PREDICTION_COUNT: "/prediction/count",           // UNUSED
+  ONBOARDING: "onboarding",                        // USED — DashboardDataContext
+  SET_TIMEZONE: "setTimezone",                     // USED — DashboardDataContext
 
-  // User Profile
-  USER_PROFILE: "user-my-profile",
-  USER_PROFILE_DELETE: "user/delete",
-  USER_PROFILE_UPDATE: "saveUser",
-  CONTACT_US: "post/contact",
-  CONTACT_DETAILS: "contact-details",
+  // ── Mock tests ─────────────────────────────────────────────────────────
+  MOCK_TEST_LIST: "web/mock1?new_format=0",                  // USED — MockTestScreen
+  EXTENSIVE_MOCK_TEST_LIST: "web/mock1?new_format=1",        // USED — MockTestScreen
+  MOCK_TEST_DETAIL: "question/detail",                       // USED — useMockSession
+  PENDING_TEST_LIST: "pending/mock?new_format=0",            // USED — usePendingMocks
+  EXTENSIVE_PENDING_TEST_LIST: "pending/mock?new_format=1",  // USED — usePendingMocks
+  SUBMIT_MOCK: "submit/mock",                                // USED — useSubmitQueue / useRecoveryMocks
+  REMAINING_MOCK: "set/mockTime",                            // USED — MockTestRunner bulk-skip on section boundary / timeout (legacy `submitRemainingQuesAPI`)
+  SUBMIT_FAILED_MOCK: "submitFailed/mock",                   // USED — MockTestRunner final close signal after queue flush (legacy `submitFailedMockAPI`)
+  MOCK_RESULT: "mock/result?new_format=0",                   // USED — usePastMocks
+  EXTENSIVE_MOCK_RESULT: "mock/result?new_format=1",         // USED — usePastMocks
+  MOCK_SCORE: "mock/score/",                                 // USED — useMockResult
+  MOCK_ANALYSIS: "mock/resultDetail/",                       // USED — useMockAnalysis
 
-  // Dashboard
-  DASHBOARD_DATA: "get_dashboard_data",
-  PTE_CORE_DASHBOARD_DATA: "get_dashboard_data",
+  // ── User profile ───────────────────────────────────────────────────────
+  USER_PROFILE: "user-my-profile",                 // USED — UserContext
+  USER_PROFILE_DELETE: "user/delete",              // USED — ProfileScreen
+  USER_PROFILE_UPDATE: "saveUser",                 // USED — UserContext
+  UPDATE_NAME: "update-name",                      // USED — UserContext / socialAuthService
+  UPDATE_EXAM_DATE: "updateTarget",                // USED — UserContext
+  CHANGE_PASSWORD: "changePassword",               // USED — NewPasswordScreen
+  SEND_UPDATE_EMAIL_OTP: `${BASE_URL}/send-update-email-otp`, // USED — useEditProfileForm
+  UPDATE_USER_EMAIL: `${BASE_URL}/update-user-email`,         // USED — useEditProfileForm
 
-  MARK_N_VIDEO_WATCHED: "mark/viewed",
-  UPDATE_EXAM_DATE: "updateTarget",
-  BOOK_TRAIL_CLASSES: "btc-submit-data",
-  SUBMIT_QUERY: "submit-query",
-  GET_ALL_BRANCHES: "getAllBranches",
+  // ── Dashboard ──────────────────────────────────────────────────────────
+  DASHBOARD_DATA: "get_dashboard_data",            // USED — DashboardDataContext
+  PTE_CORE_DASHBOARD_DATA: "get_dashboard_data",   // PTE-CORE — auto-resolved variant
+  MARK_N_VIDEO_WATCHED: "mark/viewed",             // USED — Dashboard / Videos
+  BOOK_TRAIL_CLASSES: "btc-submit-data",           // USED — LiveSessionsScreen
 
-  // Practice
-  LIST_QUESTION: "question",
-  SPEAKING_READ_ALOUD: "question/1",
-  SPEAKING_REPEAT_SENTENCE: "question/2",
-  SPEAKING_DESCRIBE_IMAGE: "question/3",
-  SPEAKING_RETELL_LECTURE: "question/4",
-  SPEAKING_ANSWER_SHORT_QUESTION: "question/5",
-  WRITING_SUMMERISE_TEXT: "question/6",
-  WRITING_ESSAY: "question/7",
-  READING_MULTIPLE_SINGLE_ANSWER: "question/8",
-  READING_MULTIPLE_MULTIPLE_ANSWER: "question/9",
-  READING_REORDER_PARAGRAPH: "question/10",
-  READING_FILL_BLANK: "question/11",
-  READING_WRITING_FILL_BLANK: "question/12",
-  LISTENING_SUMMARISE_SPOKEN_TEXT: "question/13",
-  LISTENING_MCQ_SINGLE_ANSWER: "question14",
-  LISTENING_MCQ_MULTIPLE_ANSWER: "question/15",
-  LISTENING_FILL_BLANK: "question/16",
-  LISTENING_HIGHLIGHTING_SUMMARIES: "question/17",
-  LISTENING_MISSING_WORDS: "question/18",
-  LISTENING_INCORRECT_WORDS: "question/19",
-  LISTENING_FROM_DICTATION: "question/20",
+  // ── Practice catalog & questions ───────────────────────────────────────
+  LIST_QUESTION: "question",                       // USED — PracticeCommonList / PracticeQuestionDetail
+  CATEGORIES: "categories",                        // USED — PracticeScreen / PracticeCommonList / MonthlyPrediction / ProgressTracker
+  GET_TOKENS: "getTokens",                         // USED — PracticeScreen
+  SUBMIT_ANSWER: "check/answer2",                  // USED — PracticeQuestionDetail
+  PTE_CORE_SUBMIT_ANSWER: "submit/practice",       // USED — PracticeQuestionDetail (direct, not via resolver)
+  SET_TAG: "set/tag",                              // USED — PracticeQuestionDetail / PracticeCommonList / DailyFeedback
+  PRACTICE_DETAIL: "practiceDetail",               // UNUSED — superseded by SINGLE_PRACTICE_DETAIL
+  SINGLE_PRACTICE_DETAIL: "single/practiceDetail", // USED — DailyFeedbackDetailScreen
+  SHOW_HISTORY: "show/history",                    // USED — PracticeQuestionDetail
+  TEXT_TRANSLATION: "translate/sentence",          // USED — PracticeQuestionDetail
+  REPORT: "report/question",                       // USED — PracticeQuestionDetail
 
-  EXAM_QUESTIONS: "question/1?type=3",
-  MONTHLY_PREDICTION: "question/1?type=2",
+  // ── Per-question-type endpoints (deleted) ──────────────────────────────
+  // The 20 SPEAKING_* / WRITING_* / READING_* / LISTENING_* constants plus
+  // EXAM_QUESTIONS / MONTHLY_PREDICTION were just `question/<id>` strings.
+  // They've been removed in favour of the existing dynamic pattern used
+  // everywhere in code:
+  //
+  //   `${API_ENDPOINTS.LIST_QUESTION}/${categoryId}`
+  //   `${API_ENDPOINTS.LIST_QUESTION}/${categoryId}?type=${type}`
+  //
+  // Backend question-type id mapping for reference:
+  //   1  Read Aloud                  11 Reading Fill in the Blanks
+  //   2  Repeat Sentence             12 R&W Fill in the Blanks
+  //   3  Describe Image              13 Summarise Spoken Text
+  //   4  Re-tell Lecture             14 Listening MCQ Single
+  //   5  Answer Short Question       15 Listening MCQ Multiple
+  //   6  Summarise Written Text      16 Listening Fill in the Blanks
+  //   7  Write Essay                 17 Highlight Correct Summary
+  //   8  Reading MCQ Single          18 Select Missing Word
+  //   9  Reading MCQ Multiple        19 Highlight Incorrect Words
+  //   10 Re-order Paragraphs         20 Write From Dictation
 
-  SUBMIT_ANSWER: "check/answer2",
-  PTE_CORE_SUBMIT_ANSWER: "submit/practice",
+  // ── Progress ───────────────────────────────────────────────────────────
+  PROGRESS_TRACKER: "progress",                    // USED — useProgressData (`progress/{skillId}?mock=0`)
+  TESTED_EXAM: "tested/exam",                      // UNUSED
+  DAILY_REPORT: "mock/daily-report",               // USED — DailyFeedbackListScreen
 
-  SUBMIT_EXPLANATION: "submit-explanation",
-  SET_TAG: "set/tag",
+  // ── Videos / Templates / Predictions ───────────────────────────────────
+  PTE_VIDEOS: "get-stgy-videos",                   // USED — useStrategyVideos
+  PREDICTION_DATA: "prediction/list",              // USED — MenuScreen
+  TEMPLATE_DATA: "template/list?skip=",            // USED — MenuScreen
+  HELP_DATA: "template/listNew?skip=0&type=1",     // USED — MenuScreen
+  SUBMIT_EXPLANATION: "submit-explanation",        // UNUSED
 
-  SUBMIT_MOCK: "submit/mock",
-  REMAINING_MOCK: "set/mockTime",
-  SUBMIT_FAILED_MOCK: "submitFailed/mock",
+  // ── Notifications ──────────────────────────────────────────────────────
+  GET_NOTIFICATIONS: "getNotifications",           // USED — NotificationsListScreen / DashboardDataContext
+  MARK_AS_READ: "markNotificationAsRead",          // USED — NotificationsListScreen
 
-  PTE_VIDEOS: "get-stgy-videos",
-  PREDICTION_DATA: "prediction/list",
-  TEMPLATE_DATA: "template/list?skip=",
-  HELP_DATA: "template/listNew?skip=0&type=1",
-  SUBMIT_FEEDBACK: "feedback/app",
-  REPORT: "report/question",
-  PROGRESS_TRACKER: "progress",
-  PROGRESS_DETAIL: "progress",
-  TESTED_EXAM: "tested/exam",
-  MOCK_RESULT: "mock/result?new_format=0",
-  EXTENSIVE_MOCK_RESULT: "mock/result?new_format=1",
-  MOCK_SCORE: "mock/score/",
-  MOCK_ANALYSIS: "mock/resultDetail/",
-  MOCK_TUTOR_FEEDBACK: "mock/resultDetail/",
-  MOCK_VIEW_FEEDBACK: "mock/resultDetail/",
+  // ── Support / Contact ──────────────────────────────────────────────────
+  CONTACT_US: "post/contact",                      // USED — ContactSupportScreen
+  CONTACT_DETAILS: "contact-details",              // USED — ContactSupportScreen
+  SUBMIT_QUERY: "submit-query",                    // UNUSED
+  GET_ALL_BRANCHES: "getAllBranches",              // UNUSED
+  SUBMIT_FEEDBACK: "feedback/app",                 // USED — FeedbackModal
 
-  ADD_NOTES: "add/note",
-  SHOW_NOTES: "show/notes",
-  DELETE_NOTE: "delete/note",
-  DELETE_ME: "delete/question/responseNew",
-  SHOW_HISTORY: "show/history",
-  SHOW_COMMENT: "show/comment",
-  ADD_COMMENT: "add/question/comment",
-  DELETE_COMMENT: "delete/question/comment",
+  // ── Live sessions / Tasks ──────────────────────────────────────────────
+  LIVE_SESSIONS: "get/session-wl",                 // USED — LiveSessionsScreen
+  PTE_CORE_LIVE_SESSIONS: "get/session",           // PTE-CORE — auto-resolved variant
+  SAVE_TASK: "save-task",                          // UNUSED — FUTURE (tasks feature not built)
+  GET_TASKS: "get-task",                           // UNUSED — FUTURE (tasks feature not built)
 
-  LIVE_SESSIONS: "get/session-wl",
-  PTE_CORE_LIVE_SESSIONS: "get/session",
-  SAVE_TASK: "save-task",
-  GET_TASKS: "get-task",
-  DAILY_REPORT: "mock/daily-report",
-  GET_NOTIFICATIONS: "getNotifications",
-  MARK_AS_READ: "markNotificationAsRead",
-  DELETE_NOTIFICATION: "markNotificationAsRead",
-  CATEGORIES: "categories",
-  GET_TOKENS: "getTokens",
-  WORD_DEFINITION: "word/definition",
-  TEXT_TRANSLATION: "translate/sentence",
-  REPORT_QUESTION: "report/question",
-  UPDATE_NAME: "update-name",
-  CHANGE_PASSWORD: "changePassword",
-  SEND_UPDATE_EMAIL_OTP: `${BASE_URL}/send-update-email-otp`,
-  UPDATE_USER_EMAIL: `${BASE_URL}/update-user-email`,
+  // ── Notes (feature not built) ──────────────────────────────────────────
+  ADD_NOTES: "add/note",                           // UNUSED — FUTURE
+  SHOW_NOTES: "show/notes",                        // UNUSED — FUTURE
+  DELETE_NOTE: "delete/note",                      // UNUSED — FUTURE
 
-  PRACTICE_DETAIL: "practiceDetail",
-  SINGLE_PRACTICE_DETAIL: "single/practiceDetail",
-  SET_TIMEZONE: "setTimezone",
-  ONBOARDING: "onboarding",
+  // ── Comments (feature not built) ───────────────────────────────────────
+  SHOW_COMMENT: "show/comment",                    // UNUSED — FUTURE
+  ADD_COMMENT: "add/question/comment",             // UNUSED — FUTURE
+  DELETE_COMMENT: "delete/question/comment",       // UNUSED — FUTURE
 
-  // Subscription / Packages
-  GET_PACKAGES: "getPackages",
-  CANCEL_SUBSCRIPTION: "cancel-subscription",
+  // ── Misc unused ────────────────────────────────────────────────────────
+  DELETE_ME: "delete/question/responseNew",        // UNUSED
+  WORD_DEFINITION: "word/definition",              // UNUSED — FUTURE (dictionary lookup)
+
+  // ── Subscription / Packages ────────────────────────────────────────────
+  GET_PACKAGES: "getPackages",                     // USED — useSubscriptionPackages
+  CANCEL_SUBSCRIPTION: "cancel-subscription",      // UNUSED — FUTURE (cancel flow not built)
 };
 
 export default URLS;

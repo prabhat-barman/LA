@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { styles } from '../styles';
 import type { AnswerDraft, Question } from '../types';
 
@@ -128,7 +129,7 @@ export const FibBankQuestion: React.FC<Props> = ({
   return (
     <View style={styles.fibContainer}>
       {question.prompt && fib.parts.join('').trim().length === 0 ? (
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       ) : null}
 
       <Text style={styles.fibHelper}>

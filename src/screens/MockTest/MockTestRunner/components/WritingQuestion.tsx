@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { Text, TextInput, View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { AudioPlayer } from '../../../../modules/audio';
 import { countWords } from '../helpers';
 import { styles } from '../styles';
@@ -114,7 +115,10 @@ export const WritingQuestion: React.FC<Props> = ({
     <View style={styles.writingContainer}>
       {config.source === 'paragraph' && question.paragraph && (
         <View style={styles.writingParagraphBox}>
-          <Text style={styles.writingParagraphText}>{question.paragraph}</Text>
+          <HtmlText
+            content={question.paragraph}
+            style={styles.writingParagraphText}
+          />
         </View>
       )}
       {config.source === 'audio' && question.audioUrl && (
@@ -127,7 +131,7 @@ export const WritingQuestion: React.FC<Props> = ({
         />
       )}
       {question.prompt && (
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       )}
       <Text style={styles.writingHelperText}>{config.helperText}</Text>
 

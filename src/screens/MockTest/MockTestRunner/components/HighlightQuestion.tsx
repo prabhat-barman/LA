@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { AudioPlayer } from '../../../../modules/audio';
 import { tokenizeHighlightAnswer } from '../helpers';
 import { styles } from '../styles';
@@ -69,7 +70,7 @@ export const HighlightQuestion: React.FC<Props> = ({
   return (
     <View style={styles.highlightContainer}>
       {question.prompt ? (
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       ) : null}
 
       {audioUrl.length > 0 ? (

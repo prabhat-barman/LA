@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { HtmlText } from '../../../../components/atoms/HtmlText';
 import { styles } from '../styles';
 import type { AnswerDraft, Question } from '../types';
 
@@ -103,7 +104,7 @@ export const FibDropdownQuestion: React.FC<Props> = ({
         // Only render the prompt when the parsed text segments are
         // empty — otherwise the parts already contain the prompt and
         // re-rendering it doubles up.
-        <Text style={styles.questionPrompt}>{question.prompt}</Text>
+        <HtmlText content={question.prompt} style={styles.questionPrompt} />
       ) : null}
 
       <Text style={styles.fibHelper}>

@@ -20,7 +20,6 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import apiClient from '../../services/apiClient';
-import { logger } from '../../services/logger';
 import { API_ENDPOINTS } from '../../config/apiConfig';
 import { MockTestSkeleton } from '../../components/atoms/Skeleton';
 import { hasActiveSubscriptionFromData } from '../../utils/subscriptionMapping';
@@ -212,7 +211,6 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null); // 'action-id'
 
   const isExtensive = activeToggle === 'Extensive Mock Test';
   const currentCache = isExtensive ? extensiveCache : normalCache;
@@ -396,46 +394,6 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
       title: item.title,
     });
   }, [navigation, isExtensive, selectedCategory, showToast]);
-
-  const handleAction = useCallback(async (action: string, item: MockTestItem) => {
-    if (item.locked) {
-      showToast('Locked — subscribe to unlock results.', 'info');
-      return;
-    }
-    const key = `${action}-${item.id}`;
-    if (actionLoading === key) return;
-    setActionLoading(key);
-    try {
-      let endpoint = '';
-      if (action === 'Score') {
-        endpoint = `${API_ENDPOINTS.MOCK_SCORE}${item.id}`;
-      } else if (action === 'Analysis') {
-        endpoint = `${API_ENDPOINTS.MOCK_ANALYSIS}${item.id}`;
-      } else if (action === 'Feedback' || action === 'View') {
-        endpoint = isExtensive
-          ? `${API_ENDPOINTS.EXTENSIVE_MOCK_RESULT}`
-          : `${API_ENDPOINTS.MOCK_RESULT}`;
-      }
-      if (endpoint) {
-        const res = await apiClient.get(endpoint, {
-          params: { mock_id: item.id },
-        });
-        // TODO: navigate to result detail screen once it exists
-        showToast(`${action} loaded for ${item.title}`, 'info');
-        logger.log(`[MockTest] ${action} result for ${item.id}:`, res.data);
-      } else {
-        showToast(`${action} for ${item.title}`, 'info');
-      }
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        `Failed to load ${action}`;
-      showToast(msg, 'error');
-    } finally {
-      setActionLoading(null);
-    }
-  }, [actionLoading, isExtensive, showToast]);
 
   return (
     <View style={styles.container}>
@@ -632,9 +590,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
               <MockTestCard
                 key={test.syntheticKey}
                 test={test}
-                actionLoading={actionLoading}
                 handleStart={handleStart}
-                handleAction={handleAction}
               />
             ))
           )}
@@ -748,22 +704,26 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
 
 interface MockTestCardProps {
   test: MockTestItem;
-  actionLoading: string | null;
   handleStart: (item: MockTestItem) => void;
-  handleAction: (action: string, item: MockTestItem) => void;
 }
 
+// "Available Tests" card — purely for *starting* a fresh attempt. Result
+// actions (Feedback / Score / Analysis / View) belonged here previously
+// but they applied to every card regardless of whether the user had
+// actually attempted the mock, and their handler was a stub
+// (`showToast('${action} loaded…')` with a TODO). The proper destinations
+// for completed mocks live on the "Result" filter, which renders
+// `PastResultCard` with a working "View Detailed Result" CTA into the
+// MockTestResult screen. Keeping this card free of pseudo-actions
+// removes the UX confusion and the dead code.
 const MockTestCard = React.memo<MockTestCardProps>(({
   test,
-  actionLoading,
   handleStart,
-  handleAction,
 }) => {
   return (
     <View
       style={[styles.card, test.locked && styles.cardLocked]}
     >
-      {/* Title row with optional lock badge */}
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle} numberOfLines={1}>
           {test.title}
@@ -785,7 +745,6 @@ const MockTestCard = React.memo<MockTestCardProps>(({
         <Text style={styles.cardMeta}>{test.duration} min</Text>
       )}
 
-      {/* Primary CTA */}
       <TouchableOpacity
         style={[
           styles.startButton,
@@ -802,33 +761,6 @@ const MockTestCard = React.memo<MockTestCardProps>(({
           {test.locked ? 'Unlock' : 'Start Test'}
         </Text>
       </TouchableOpacity>
-
-      {/* Actions Footer row — only meaningful for unlocked / attempted tests */}
-      {!test.locked && (
-        <View style={styles.actionsContainer}>
-          {['Feedback', 'Score', 'Analysis', 'View'].map((action) => {
-            const key = `${action}-${test.id}`;
-            const isLoading = actionLoading === key;
-            return (
-              <TouchableOpacity
-                key={action}
-                style={styles.actionLink}
-                onPress={() => handleAction(action, test)}
-                disabled={isLoading}
-              >
-                <Text
-                  style={[
-                    styles.actionLinkText,
-                    isLoading && styles.actionLinkTextLoading,
-                  ]}
-                >
-                  {isLoading ? '...' : action}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
     </View>
   );
 });

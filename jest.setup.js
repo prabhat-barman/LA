@@ -192,6 +192,21 @@ jest.mock('@react-native-async-storage/async-storage', () => {
       multiRemove: jest.fn(async keys => {
         keys.forEach(k => store.delete(k));
       }),
+      // v3 API surface (Record-returning `getMany`, `setMany`,
+      // `removeMany`). Mirrors the in-memory `store` and is API-
+      // compatible with the real package so production callers
+      // exercise the same code paths under test.
+      getMany: jest.fn(async keys => {
+        const out = {};
+        for (const k of keys) out[k] = store.get(k) ?? null;
+        return out;
+      }),
+      setMany: jest.fn(async entries => {
+        for (const [k, v] of Object.entries(entries)) store.set(k, v);
+      }),
+      removeMany: jest.fn(async keys => {
+        keys.forEach(k => store.delete(k));
+      }),
     },
   };
 });

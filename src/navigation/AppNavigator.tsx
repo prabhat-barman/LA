@@ -1,7 +1,11 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  type NavigatorScreenParams,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { navigationRef } from '../services/navigationService';
+import type { DashboardTabParamList } from './types';
 
 // --- Cold-start path: imported eagerly so the splash → auth → dashboard
 // transition isn't gated on additional require() work. ---
@@ -17,6 +21,13 @@ import { DashboardTabNavigator } from './DashboardTabNavigator';
 // --- Maintenance check ---
 import Config from '../config/Config';
 import { MaintenanceScreen } from '../screens/Maintenance/MaintenanceScreen';
+import type {
+  MockSection,
+  MockTestRunnerRouteParams,
+  MockTestVariant,
+} from '../screens/MockTest/MockTestRunner/types';
+import type { MockTestResultRouteParams } from '../screens/MockTest/MockTestResult/types';
+import type { MockTestAnalysisRouteParams } from '../screens/MockTest/MockTestAnalysis/types';
 
 // All other screens are loaded lazily through React Navigation's
 // `getComponent` so their bundles don't ship until first navigation.
@@ -33,7 +44,13 @@ export type RootStackParamList = {
     | { email: string; flow?: 'forgotPassword' | 'changePassword'; otp?: string }
     | undefined;
   ForgotPassword: undefined;
-  Dashboard: undefined;
+  // `NavigatorScreenParams` lets root-stack screens (e.g.
+  // MockTestProgress) deep-link into a specific tab WITH params —
+  // `navigation.navigate('Dashboard', { screen: 'Practice', params: {
+  // initialCategory: 'Speaking' } })`. The shape is `… | undefined`
+  // so legacy `navigation.navigate('Dashboard')` calls keep
+  // compiling unchanged.
+  Dashboard: NavigatorScreenParams<DashboardTabParamList> | undefined;
   Profile: undefined;
   PersonalInfo: undefined;
   EditProfile: undefined;
@@ -60,6 +77,22 @@ export type RootStackParamList = {
     questionsList: { id: number | string; title: string; difficulty: string; isNew: boolean }[];
     initialIndex: number;
   };
+  MockTestPrerequisite: MockTestRunnerRouteParams;
+  MockTestRunner: MockTestRunnerRouteParams;
+  MockTestResult: MockTestResultRouteParams;
+  MockTestAnalysis: MockTestAnalysisRouteParams;
+  MockTestProgress: undefined;
+  // Phase 5.1 — paginated history. All params optional so the
+  // screen works both as a deep-linked filtered view ("Show me all
+  // Speaking mocks, lowest first") and as a plain "show
+  // everything" entry from the dashboard rail.
+  MockTestHistory:
+    | {
+        variant?: MockTestVariant | null;
+        category?: MockSection | 'Full Mock' | null;
+        sortOrder?: 'newest' | 'oldest' | 'highest' | 'lowest';
+      }
+    | undefined;
   PdfList: {
     title: string;
     endpoint: string;
@@ -201,6 +234,43 @@ const AppNavigator = () => {
           getComponent={() =>
             require('../screens/Practice/PracticeQuestionDetail')
               .PracticeQuestionDetailScreen
+          }
+        />
+        <Stack.Screen
+          name="MockTestPrerequisite"
+          getComponent={() =>
+            require('../screens/MockTest/MockTestPrerequisite')
+              .MockTestPrerequisiteScreen
+          }
+        />
+        <Stack.Screen
+          name="MockTestRunner"
+          getComponent={() =>
+            require('../screens/MockTest/MockTestRunner').MockTestRunnerScreen
+          }
+        />
+        <Stack.Screen
+          name="MockTestResult"
+          getComponent={() =>
+            require('../screens/MockTest/MockTestResult').MockTestResultScreen
+          }
+        />
+        <Stack.Screen
+          name="MockTestAnalysis"
+          getComponent={() =>
+            require('../screens/MockTest/MockTestAnalysis').MockTestAnalysisScreen
+          }
+        />
+        <Stack.Screen
+          name="MockTestProgress"
+          getComponent={() =>
+            require('../screens/MockTest/MockTestProgress').MockTestProgressScreen
+          }
+        />
+        <Stack.Screen
+          name="MockTestHistory"
+          getComponent={() =>
+            require('../screens/MockTest/MockTestHistory').MockTestHistoryScreen
           }
         />
         <Stack.Screen

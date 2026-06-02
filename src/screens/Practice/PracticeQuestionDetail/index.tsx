@@ -42,13 +42,18 @@ import { tagColorStore } from '../../../utils/tagColorStore';
 import { TAG_COLOR_HEX } from './constants';
 import {
   buildMcqAnswerPayload,
+  buildPracticeAnswerFromDraft,
   cleanHtmlText,
+  getMissingAnswerToast,
+  isDictationCategory,
   isMcqCategory,
   isMcqMultipleCategory,
   isOptionCorrect,
+  isRunnerBridgeCategory,
   normalizeDifficulty,
   sortAttemptsBy,
 } from './helpers';
+import type { AnswerDraft as RunnerAnswerDraft } from '../../MockTest/MockTestRunner/types';
 import { scale } from './scale';
 import { styles } from './styles';
 import type {
@@ -75,6 +80,7 @@ import { HiddenAttemptAudioWebView } from './components/HiddenAttemptAudioWebVie
 import { InstructionBanner } from './components/InstructionBanner';
 import { ModeSwitcher } from './components/ModeSwitcher';
 import { NavigationFooter } from './components/NavigationFooter';
+import { MockRunnerBridge } from './components/MockRunnerBridge';
 import { QuestionContent } from './components/QuestionContent';
 import { QuestionMetaBlock } from './components/QuestionMetaBlock';
 import { ReportIssueModal } from './components/ReportIssueModal';
@@ -174,9 +180,29 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     return trimmed.split(/\s+/).length;
   }, [typedResponse]);
 
-  const isWritingCategory = categoryId === 6 || categoryId === 7;
+  // Dictation (20) is a typed-text answer just like Essay / Summarize
+  // — treat it as a writing category so the same TextInput surface
+  // (and the same word-count helper) handles the user input. The
+  // listening-audio side is rendered by `MediaConsole` above, gated
+  // by `metadata.hasAudio`.
+  const isDictation = isDictationCategory(categoryId);
+  const isWritingCategory = categoryId === 6 || categoryId === 7 || isDictation;
   const isMcq = isMcqCategory(categoryId);
   const isMcqMulti = isMcqMultipleCategory(categoryId);
+  // True for the categories whose UI is rendered by `MockRunnerBridge`
+  // (10 Reorder, 11/12/16 FIB, 19 Highlight Incorrect Words). Drives
+  // both the conditional render below and the validation path in
+  // `submitAnswer`.
+  const isRunnerBridge = isRunnerBridgeCategory(categoryId);
+  const [runnerDraft, setRunnerDraft] = useState<RunnerAnswerDraft>(
+    () => ({ kind: 'empty' as const }),
+  );
+  // Reset the bridge draft whenever the active question changes —
+  // we don't want a stale answer from the previous Reorder to bleed
+  // into the next one.
+  useEffect(() => {
+    setRunnerDraft({ kind: 'empty' as const });
+  }, [currentQuestionId]);
   const [writingTimeLeft, setWritingTimeLeft] = useState<number>(0);
   const formattedWritingTime = useMemo(() => {
     const m = Math.floor(writingTimeLeft / 60);
@@ -668,7 +694,20 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   }, [additionalDetails, currentQuestionId, selectedReason, showToast]);
 
   const submitAnswer = useCallback(async () => {
-    if (isMcq) {
+    // Built up-front for the runner-bridge categories so the
+    // validation guard and the payload-build path agree on the
+    // serialised draft (and we only walk the FIB / highlight
+    // arrays once).
+    let bridgeAnswerValue: string | null = null;
+    if (isRunnerBridge) {
+      bridgeAnswerValue = buildPracticeAnswerFromDraft(
+        runnerDraft as unknown as Parameters<typeof buildPracticeAnswerFromDraft>[0],
+      );
+      if (!bridgeAnswerValue) {
+        showToast(getMissingAnswerToast(categoryId), 'error');
+        return;
+      }
+    } else if (isMcq) {
       if (selectedOptionIds.size === 0) {
         showToast(
           isMcqMulti
@@ -707,8 +746,10 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       formData.append('device', 'mobile');
       formData.append('isPlatform', Platform.OS);
 
-      // MCQ has no audio recording, so duration is always 0.
-      const recordDuration = isWritingCategory || isMcq ? 0 : recordingDurationSec;
+      // MCQ + runner-bridge categories have no audio recording, so
+      // duration is always 0 for them.
+      const recordDuration =
+        isWritingCategory || isMcq || isRunnerBridge ? 0 : recordingDurationSec;
       const m = Math.floor(recordDuration / 60);
       const s = Math.floor(recordDuration % 60);
       const durationStr = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
@@ -719,7 +760,11 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       formData.append('strategy', strategyVal);
 
       let answerValue = '';
-      if (isMcq) {
+      if (isRunnerBridge) {
+        // Already validated non-null above; the `?? ''` is a
+        // belt-and-braces fallback for TypeScript's narrowing.
+        answerValue = bridgeAnswerValue ?? '';
+      } else if (isMcq) {
         answerValue = buildMcqAnswerPayload(selectedOptionIds);
       } else if (isWritingCategory) {
         answerValue = typedResponse;
@@ -763,7 +808,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
           '';
       formData.append('q_ans', correctSampleAnswer);
 
-      if (!isWritingCategory && !isMcq && recordedUri) {
+      if (!isWritingCategory && !isMcq && !isRunnerBridge && recordedUri) {
         let fileUri = recordedUri;
         if (Platform.OS === 'android') {
           const cleanPath = fileUri.replace(/^file:\/\//, '').replace(/^\/+/, '');
@@ -826,11 +871,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     isCore,
     isMcq,
     isMcqMulti,
+    isRunnerBridge,
     isWritingCategory,
     questionDetails,
     questionText,
     recordedUri,
     recordingDurationSec,
+    runnerDraft,
     samplePlayer,
     selectedMode,
     selectedOptionIds,
@@ -1112,7 +1159,30 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               </View>
             )}
 
-            {!isWritingCategory && !isMcq && (
+            {isRunnerBridge && (
+              <MockRunnerBridge
+                categoryId={categoryId}
+                questionDetails={questionDetails}
+                draft={runnerDraft}
+                onDraftChange={setRunnerDraft}
+                resolveAudioUrl={resolveAudioUrl}
+              />
+            )}
+
+            {/* MediaConsole policy (kept declarative so the next person
+                to touch this file doesn't have to puzzle out the
+                negation chain):
+                - Runner-bridge categories (10/11/12/16/19) embed their
+                  own audio inside the bridge component → skip.
+                - Otherwise render whenever the question needs audio
+                  playback OR recording. That covers all speaking
+                  (recordingDuration > 0) AND listening categories
+                  (hasAudio === true) — including Listening MCQ
+                  (14/15/17/18) and Dictation (20), which the legacy
+                  `!isWritingCategory && !isMcq` guard accidentally
+                  dropped from the audio path. */}
+            {!isRunnerBridge &&
+              (metadata.hasAudio || metadata.recordingDuration > 0) && (
               renderPhase >= 3 ? (
                 <LocalErrorBoundary errorMessage="Failed to initialize audio console.">
                   <MediaConsole

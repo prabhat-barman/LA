@@ -141,8 +141,11 @@ const URLS: Record<string, string> = {
   // ── Live sessions / Tasks ──────────────────────────────────────────────
   LIVE_SESSIONS: "get/session-wl",                 // USED — LiveSessionsScreen
   PTE_CORE_LIVE_SESSIONS: "get/session",           // PTE-CORE — auto-resolved variant
-  SAVE_TASK: "save-task",                          // UNUSED — FUTURE (tasks feature not built)
-  GET_TASKS: "get-task",                           // UNUSED — FUTURE (tasks feature not built)
+  SAVE_TASK: "save-task",                          // USED — useDailyGoals (set targets for date)
+  GET_TASKS: "get-task",                           // USED — useDailyGoals (read targets for date)
+  // DAILY_REPORT lives above (line ~121) and is shared between
+  // DailyFeedbackListScreen + useDailyGoals. Keeping the cross-
+  // reference here so future contributors don't add a duplicate.
 
   // ── Notes (feature not built) ──────────────────────────────────────────
   ADD_NOTES: "add/note",                           // UNUSED — FUTURE

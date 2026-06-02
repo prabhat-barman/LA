@@ -12,6 +12,7 @@ jest.mock('./icons', () => {
 
 import {
   buildMcqAnswerPayload,
+  buildPracticeAnswerFromDraft,
   computeOverallPercent,
   computeOverallRaw,
   ensureArray,
@@ -19,14 +20,20 @@ import {
   formatTime,
   getAttemptAudioFile,
   getAttemptUserName,
+  getMissingAnswerToast,
   getOptionLeadingLetter,
   getOverlayScoreColor,
   getSubscoreByType,
   getWordColor,
+  isDictationCategory,
+  isFibCategory,
+  isHighlightWordsCategory,
   isMcqCategory,
   isMcqMultipleCategory,
   isMcqSingleCategory,
   isOptionCorrect,
+  isReorderCategory,
+  isRunnerBridgeCategory,
   normalizeDifficulty,
   parseSelectedOptionIds,
   resolveSubscore,
@@ -383,6 +390,182 @@ describe('PracticeQuestionDetail helpers', () => {
       it('returns empty string for empty iterable', () => {
         expect(buildMcqAnswerPayload([])).toBe('');
       });
+    });
+  });
+
+  describe('Category detection (runner-bridge categories)', () => {
+    describe('isMcqSingleCategory', () => {
+      it('returns true for 8, 14, 17, 18', () => {
+        expect(isMcqSingleCategory(8)).toBe(true);
+        expect(isMcqSingleCategory(14)).toBe(true);
+        expect(isMcqSingleCategory(17)).toBe(true);
+        expect(isMcqSingleCategory(18)).toBe(true);
+      });
+      it('returns false for other categories', () => {
+        expect(isMcqSingleCategory(9)).toBe(false);
+        expect(isMcqSingleCategory(10)).toBe(false);
+        expect(isMcqSingleCategory(20)).toBe(false);
+      });
+    });
+
+    describe('isReorderCategory', () => {
+      it('returns true only for 10', () => {
+        expect(isReorderCategory(10)).toBe(true);
+        expect(isReorderCategory(11)).toBe(false);
+        expect(isReorderCategory(0)).toBe(false);
+      });
+    });
+
+    describe('isFibCategory', () => {
+      it('returns true for 11, 12, 16', () => {
+        expect(isFibCategory(11)).toBe(true);
+        expect(isFibCategory(12)).toBe(true);
+        expect(isFibCategory(16)).toBe(true);
+      });
+      it('returns false for other listening/reading categories', () => {
+        expect(isFibCategory(10)).toBe(false);
+        expect(isFibCategory(13)).toBe(false);
+        expect(isFibCategory(20)).toBe(false);
+      });
+    });
+
+    describe('isHighlightWordsCategory', () => {
+      it('returns true only for 19', () => {
+        expect(isHighlightWordsCategory(19)).toBe(true);
+        expect(isHighlightWordsCategory(17)).toBe(false);
+      });
+    });
+
+    describe('isDictationCategory', () => {
+      it('returns true only for 20', () => {
+        expect(isDictationCategory(20)).toBe(true);
+        expect(isDictationCategory(13)).toBe(false);
+      });
+    });
+
+    describe('isRunnerBridgeCategory', () => {
+      it('covers 10/11/12/16/19', () => {
+        for (const id of [10, 11, 12, 16, 19]) {
+          expect(isRunnerBridgeCategory(id)).toBe(true);
+        }
+      });
+      it('excludes 17/18 (handled by MCQ surface) and 20 (writing surface)', () => {
+        expect(isRunnerBridgeCategory(17)).toBe(false);
+        expect(isRunnerBridgeCategory(18)).toBe(false);
+        expect(isRunnerBridgeCategory(20)).toBe(false);
+      });
+      it('excludes speaking / writing / MCQ categories', () => {
+        for (const id of [1, 2, 3, 6, 7, 8, 9, 14, 15, 21, 22]) {
+          expect(isRunnerBridgeCategory(id)).toBe(false);
+        }
+      });
+    });
+  });
+
+  describe('buildPracticeAnswerFromDraft', () => {
+    it('returns null for an empty draft', () => {
+      expect(buildPracticeAnswerFromDraft({ kind: 'empty' })).toBeNull();
+    });
+
+    it('serialises a reorder draft as comma-joined ids', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'reorder',
+          orderedIds: ['p3', 'p1', 'p2'],
+        }),
+      ).toBe('p3,p1,p2');
+    });
+
+    it('returns null for an empty reorder draft', () => {
+      expect(
+        buildPracticeAnswerFromDraft({ kind: 'reorder', orderedIds: [] }),
+      ).toBeNull();
+    });
+
+    it('serialises FIB-bank with leading-comma interleaved CSV', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'fib-bank',
+          values: ['alpha', null, 'beta'],
+        }),
+      ).toBe('alpha,,,,beta');
+    });
+
+    it('serialises FIB-dropdown identically to bank', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'fib-dropdown',
+          values: [null, 'a'],
+        }),
+      ).toBe(',,a');
+    });
+
+    it('returns null when every FIB position is empty', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'fib-bank',
+          values: [null, null, ''],
+        }),
+      ).toBeNull();
+    });
+
+    it('serialises FIB-input as plain comma-joined values', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'fib-input',
+          values: ['cat', '', 'dog'],
+        }),
+      ).toBe('cat,,dog');
+    });
+
+    it('returns null when every FIB-input cell is blank/whitespace', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'fib-input',
+          values: ['  ', '', '\t'],
+        }),
+      ).toBeNull();
+    });
+
+    it('serialises highlight selections as comma-joined words', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'highlight',
+          selectedIndices: [3, 7],
+          selectedWords: ['quickly', 'enough'],
+        }),
+      ).toBe('quickly,enough');
+    });
+
+    it('returns null when highlight draft has no selections', () => {
+      expect(
+        buildPracticeAnswerFromDraft({
+          kind: 'highlight',
+          selectedIndices: [],
+          selectedWords: [],
+        }),
+      ).toBeNull();
+    });
+
+    it('returns null for unknown draft kinds', () => {
+      expect(
+        buildPracticeAnswerFromDraft({ kind: 'speaking' } as any),
+      ).toBeNull();
+    });
+  });
+
+  describe('getMissingAnswerToast', () => {
+    it('returns category-specific copy when known', () => {
+      expect(getMissingAnswerToast(10)).toMatch(/re-order/i);
+      expect(getMissingAnswerToast(11)).toMatch(/blank/i);
+      expect(getMissingAnswerToast(12)).toMatch(/blank/i);
+      expect(getMissingAnswerToast(16)).toMatch(/missing words/i);
+      expect(getMissingAnswerToast(19)).toMatch(/audio/i);
+      expect(getMissingAnswerToast(20)).toMatch(/heard/i);
+    });
+
+    it('falls back to a generic prompt for unknown ids', () => {
+      expect(getMissingAnswerToast(99)).toMatch(/answer the question/i);
     });
   });
 });

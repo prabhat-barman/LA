@@ -21,6 +21,13 @@ import { DashboardTabNavigator } from './DashboardTabNavigator';
 // --- Maintenance check ---
 import Config from '../config/Config';
 import { MaintenanceScreen } from '../screens/Maintenance/MaintenanceScreen';
+
+// --- App-store version check + force-update prompt. Rendered as a
+// portal-style overlay outside the Stack.Navigator so it sits above
+// every screen regardless of which one is active. The hook handles
+// the once-per-24h throttling + foreground polling internally. ---
+import { UpdateModal } from '../components/organisms/UpdateModal';
+import { useVersionCheck } from '../hooks/useVersionCheck';
 import type {
   MockSection,
   MockTestRunnerRouteParams,
@@ -37,6 +44,10 @@ import type { PracticeSection } from './types';
 
 export type RootStackParamList = {
   Splash: undefined;
+  // First-launch carousel introducing app features. The Splash route
+  // gate decides whether to send first-time users here vs. straight
+  // to Onboarding.
+  Walkthrough: undefined;
   Onboarding: undefined;
   SignIn: undefined;
   SignUp: undefined;
@@ -108,6 +119,9 @@ export type RootStackParamList = {
   LiveSessions: undefined;
   AudioModuleDemo: undefined;
   MonthlyPrediction: undefined;
+  BookTrialClass: undefined;
+  DailyGoals: undefined;
+  PracticeHistoryCalendar: undefined;
   DailyFeedback: undefined;
   DailyFeedbackDetail: {
     itemId: string | number;
@@ -123,12 +137,25 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
+  const versionCheck = useVersionCheck();
+
   if (Config.MAINTENANCE_MODE) {
     return <MaintenanceScreen />;
   }
 
   return (
     <NavigationContainer ref={navigationRef}>
+      <UpdateModal
+        visible={versionCheck.showUpdateModal}
+        forceUpdate={!!versionCheck.updateInfo?.forceUpdate}
+        latestVersion={versionCheck.updateInfo?.latestVersion ?? ''}
+        message={
+          versionCheck.updateInfo?.message ??
+          'A new version is available with improvements and fixes.'
+        }
+        onUpdate={versionCheck.handleUpdate}
+        onLater={versionCheck.handleLater}
+      />
       <Stack.Navigator
         initialRouteName="Splash"
         screenOptions={{
@@ -137,6 +164,12 @@ const AppNavigator = () => {
         }}
       >
         <Stack.Screen name="Splash" component={SplashScreen} />
+        <Stack.Screen
+          name="Walkthrough"
+          getComponent={() =>
+            require('../screens/Walkthrough/WalkthroughScreen').WalkthroughScreen
+          }
+        />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         <Stack.Screen name="SignIn" component={SignInScreen} />
         <Stack.Screen name="SignUp" component={SignUpScreen} />
@@ -313,6 +346,26 @@ const AppNavigator = () => {
           getComponent={() =>
             require('../screens/MonthlyPrediction/MonthlyPredictionScreen')
               .MonthlyPredictionScreen
+          }
+        />
+        <Stack.Screen
+          name="BookTrialClass"
+          getComponent={() =>
+            require('../screens/BookTrialClass/BookTrialClassScreen')
+              .BookTrialClassScreen
+          }
+        />
+        <Stack.Screen
+          name="DailyGoals"
+          getComponent={() =>
+            require('../screens/DailyGoals/DailyGoalsScreen').DailyGoalsScreen
+          }
+        />
+        <Stack.Screen
+          name="PracticeHistoryCalendar"
+          getComponent={() =>
+            require('../screens/PracticeHistory/PracticeHistoryCalendarScreen')
+              .PracticeHistoryCalendarScreen
           }
         />
         <Stack.Screen

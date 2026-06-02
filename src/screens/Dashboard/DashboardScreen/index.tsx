@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
   Modal,
@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { Header } from '../../../components/organisms/Header';
+import { Tooltip } from '../../../components/organisms/Tooltip';
 import { CircularProgressBar } from '../../../components/atoms/CircularProgressBar';
 import { DashboardSkeleton } from '../../../components/atoms/Skeleton';
 import { DatePickerModal } from '../../../components/molecules/DatePickerModal';
@@ -41,6 +42,13 @@ import { useToast } from '../../../context/ToastContext';
 import { useUser } from '../../../context/UserContext';
 import { API_ENDPOINTS } from '../../../config/apiConfig';
 import apiClient from '../../../services/apiClient';
+import {
+  AnalyticsEvents,
+  trackEvent,
+  trackScreen,
+} from '../../../services/analytics';
+import { initializeNotifications } from '../../../services/notificationService';
+import { TOUR_KEYS } from '../../../services/tourStorage';
 import { SmartVideoPlayer } from '../../Videos/SmartVideoPlayer';
 import { FeedbackModal } from '../FeedbackModal';
 
@@ -111,14 +119,29 @@ export const DashboardScreen = () => {
     }, [loadDashboardData]),
   );
 
+  // Boot platform notifications + an `app_open` analytics ping on
+  // first dashboard mount. `initializeNotifications()` is idempotent
+  // so re-running on subsequent Dashboard mounts is a no-op. We do
+  // it here (rather than in Splash) because the device-token sync
+  // endpoint needs an authenticated session, which is guaranteed by
+  // the time the user lands on Dashboard.
+  useEffect(() => {
+    initializeNotifications().catch(() => {});
+    trackScreen('Dashboard');
+    trackEvent(AnalyticsEvents.AppOpen);
+  }, []);
+
   // ---- Handlers ----------------------------------------------------------
   const handleMicTest = useCallback(() => {
     navigation.navigate('MicrophoneSetup');
   }, [navigation]);
 
+  // Dashboard "Book Free Trial Class" CTA → opens the real form
+  // (BookTrialClassScreen) instead of the old throwaway toast. The
+  // form does its own success/error toast on submit.
   const handleBooking = useCallback(() => {
-    showToast('Class booked successfully!', 'success');
-  }, [showToast]);
+    navigation.navigate('BookTrialClass');
+  }, [navigation]);
 
   // Hand-off from dashboard CTAs (Today's Practice / Mock Test / category
   // cards) to the bottom tab navigator. The composite navigation prop
@@ -689,6 +712,13 @@ export const DashboardScreen = () => {
         visible={feedbackModalVisible}
         onClose={() => setFeedbackModalVisible(false)}
         showToast={showToast}
+      />
+
+      <Tooltip
+        tourKey={TOUR_KEYS.DashboardWelcome}
+        title="Welcome to your dashboard"
+        body="Track your progress, set daily goals, and jump straight into practice or a mock test. Tap the bottom tabs to explore."
+        ctaLabel="Let\u2019s go"
       />
 
       <DatePickerModal

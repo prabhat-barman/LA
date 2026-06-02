@@ -27,6 +27,66 @@ jest.mock('@react-native-firebase/crashlytics', () => ({
   }),
 }));
 
+// Firebase Analytics + Messaging mocks. These pull `@react-native-
+// firebase/app` transitively, which fails outside the RN runtime,
+// so we stub the public methods we actually call.
+jest.mock('@react-native-firebase/analytics', () => {
+  const noop = jest.fn().mockResolvedValue(undefined);
+  const fn = () => ({
+    logScreenView: noop,
+    logEvent: noop,
+    setUserId: noop,
+    setUserProperty: noop,
+  });
+  return { __esModule: true, default: fn };
+});
+
+jest.mock('@react-native-firebase/messaging', () => {
+  const noop = jest.fn().mockResolvedValue(undefined);
+  const fn = () => ({
+    hasPermission: jest.fn().mockResolvedValue(1),
+    requestPermission: jest.fn().mockResolvedValue(1),
+    getToken: jest.fn().mockResolvedValue('test-fcm-token'),
+    onTokenRefresh: jest.fn(() => () => {}),
+    onMessage: jest.fn(() => () => {}),
+    setBackgroundMessageHandler: noop,
+  });
+  fn.AuthorizationStatus = { AUTHORIZED: 1, DENIED: 0, PROVISIONAL: 2 };
+  return { __esModule: true, default: fn };
+});
+
+jest.mock('@notifee/react-native', () => ({
+  __esModule: true,
+  default: {
+    createChannel: jest.fn().mockResolvedValue(undefined),
+    displayNotification: jest.fn().mockResolvedValue(undefined),
+  },
+  AndroidImportance: { HIGH: 4, DEFAULT: 3 },
+}));
+
+// `react-native-device-info` is a thin native module; only the
+// version helpers are touched in app code.
+jest.mock('react-native-device-info', () => ({
+  __esModule: true,
+  default: {
+    getVersion: () => '1.0.0',
+    getBuildNumber: () => '1',
+  },
+  getVersion: () => '1.0.0',
+  getBuildNumber: () => '1',
+}));
+
+// react-native-calendars depends on RNGestureHandler at module-eval
+// time on some setups — stub to a passthrough View component so the
+// PracticeHistoryCalendar import chain stays test-importable.
+jest.mock('react-native-calendars', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    Calendar: props => React.createElement('Calendar', props),
+  };
+});
+
 jest.mock('@react-native-google-signin/google-signin', () => ({
   GoogleSignin: {
     configure: jest.fn(),

@@ -599,6 +599,33 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
   },
+  popupVideoOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: scale(10),
+  },
+  popupVideoCard: {
+    width: '100%',
+    maxWidth: scale(420),
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(12),
+    padding: scale(10),
+    paddingTop: scale(30),
+  },
+  popupVideoCloseBtn: {
+    position: 'absolute',
+    top: scale(6),
+    right: scale(10),
+    zIndex: 1,
+    padding: scale(4),
+  },
+  popupVideoCloseLabel: {
+    fontSize: scale(20),
+    color: '#1C1F2A',
+    fontWeight: '600',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(13, 17, 43, 0.6)',

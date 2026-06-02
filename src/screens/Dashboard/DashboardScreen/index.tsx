@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -47,6 +47,7 @@ import {
   trackEvent,
   trackScreen,
 } from '../../../services/analytics';
+import { consumeJustLoggedIn } from '../../../services/loginFlag';
 import { initializeNotifications } from '../../../services/notificationService';
 import { TOUR_KEYS } from '../../../services/tourStorage';
 import { SmartVideoPlayer } from '../../Videos/SmartVideoPlayer';
@@ -64,7 +65,7 @@ import {
   getGreeting,
   getYoutubeVideoId,
 } from './helpers';
-import { FULLSCREEN_PLAYER_HEIGHT, scale } from './scale';
+import { FULLSCREEN_PLAYER_HEIGHT, scale, screenWidth } from './scale';
 import { styles } from './styles';
 import type {
   BreakdownMeta,
@@ -100,6 +101,14 @@ export const DashboardScreen = () => {
   const [activeVideo, setActiveVideo] = useState<DashboardVideoItem | null>(
     null,
   );
+  // Post-login YouTube welcome popup. Backend ships an id (or
+  // sometimes a full youtube URL) at
+  // `dashboardData.data.popup_video.youtube_vid`. We only ever pop
+  // it once per login, gated by the `auth:just_logged_in_v1` flag,
+  // so the user doesn't see the same welcome video on every cold
+  // start.
+  const [popupVideoUrl, setPopupVideoUrl] = useState<string | null>(null);
+  const popupShownRef = useRef(false);
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [examDatePickerVisible, setExamDatePickerVisible] = useState(false);
   const [examDateSaving, setExamDateSaving] = useState(false);
@@ -130,6 +139,34 @@ export const DashboardScreen = () => {
     trackScreen('Dashboard');
     trackEvent(AnalyticsEvents.AppOpen);
   }, []);
+
+  // Post-login welcome popup. Fires once per sign-in if (a) we
+  // landed here via the just-logged-in marker the auth flow drops,
+  // and (b) the dashboard payload contains a non-empty
+  // `popup_video.youtube_vid`. Wrapped in a `popupShownRef` guard
+  // so a dashboard re-fetch (e.g. focus refresh) doesn't reopen the
+  // modal mid-session.
+  useEffect(() => {
+    if (popupShownRef.current) return;
+    const raw =
+      (dashboardData?.data?.popup_video?.youtube_vid as
+        | string
+        | undefined) ??
+      (dashboardData?.popup_video?.youtube_vid as string | undefined);
+    if (!raw) return;
+    (async () => {
+      const justLoggedIn = await consumeJustLoggedIn();
+      if (!justLoggedIn) return;
+      popupShownRef.current = true;
+      // Backend sometimes returns an id, sometimes a full URL —
+      // SmartVideoPlayer accepts either via its `videoUrl` prop
+      // (it has a youtube-id extractor), so normalise to a URL.
+      const url = /^https?:\/\//i.test(raw)
+        ? raw
+        : `https://www.youtube.com/watch?v=${raw}`;
+      setPopupVideoUrl(url);
+    })();
+  }, [dashboardData]);
 
   // ---- Handlers ----------------------------------------------------------
   const handleMicTest = useCallback(() => {
@@ -764,6 +801,35 @@ export const DashboardScreen = () => {
           >
             <ArrowLeftLineIcon size={scale(22)} />
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* --- Post-login YouTube popup (one-shot per sign-in) --- */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={popupVideoUrl !== null}
+        onRequestClose={() => setPopupVideoUrl(null)}
+      >
+        <View style={styles.popupVideoOverlay}>
+          <View style={styles.popupVideoCard}>
+            <TouchableOpacity
+              onPress={() => setPopupVideoUrl(null)}
+              style={styles.popupVideoCloseBtn}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
+              <Text style={styles.popupVideoCloseLabel}>{'\u2715'}</Text>
+            </TouchableOpacity>
+            {popupVideoUrl && (
+              <SmartVideoPlayer
+                key={popupVideoUrl}
+                videoUrl={popupVideoUrl}
+                thumbnailUrl={`https://img.youtube.com/vi/${getYoutubeVideoId(popupVideoUrl)}/hqdefault.jpg`}
+                height={Math.round((screenWidth - 40) * 0.56)}
+                onError={msg => showToast(msg, 'error')}
+              />
+            )}
+          </View>
         </View>
       </Modal>
     </View>

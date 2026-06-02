@@ -28,6 +28,7 @@ import type {
 } from '../screens/MockTest/MockTestRunner/types';
 import type { MockTestResultRouteParams } from '../screens/MockTest/MockTestResult/types';
 import type { MockTestAnalysisRouteParams } from '../screens/MockTest/MockTestAnalysis/types';
+import type { PracticeSection } from './types';
 
 // All other screens are loaded lazily through React Navigation's
 // `getComponent` so their bundles don't ship until first navigation.
@@ -93,6 +94,11 @@ export type RootStackParamList = {
         sortOrder?: 'newest' | 'oldest' | 'highest' | 'lowest';
       }
     | undefined;
+  // Per-skill progress dashboard, deep-linked from the Dashboard category
+  // grid (Speaking / Writing / Reading / Listening). Param is optional so
+  // the screen can also be opened with no preselection — defaults to
+  // Speaking inside the screen.
+  ProgressTracker: { initialSkill?: PracticeSection } | undefined;
   PdfList: {
     title: string;
     endpoint: string;
@@ -271,6 +277,12 @@ const AppNavigator = () => {
           name="MockTestHistory"
           getComponent={() =>
             require('../screens/MockTest/MockTestHistory').MockTestHistoryScreen
+          }
+        />
+        <Stack.Screen
+          name="ProgressTracker"
+          getComponent={() =>
+            require('../screens/Progress/ProgressTracker').ProgressTrackerScreen
           }
         />
         <Stack.Screen

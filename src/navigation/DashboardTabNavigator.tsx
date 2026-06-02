@@ -6,6 +6,7 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { DashboardScreen } from '../screens/Dashboard/DashboardScreen';
 import { PracticeScreen } from '../screens/Practice/PracticeScreen';
@@ -133,6 +134,16 @@ const AnimatedTabItem: React.FC<TabItemProps> = ({
 
 /* ─── Custom Tab Bar ─── */
 const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
+  // With targetSdk=36 the Android 15+ OS forces edge-to-edge, so the
+  // gesture handle / 3-button nav bar sits right where our floating tab
+  // would otherwise clip. Use Math.max instead of adding to a base —
+  // otherwise iPhones with a home indicator (insets.bottom ≈ 34) end up
+  // with `20 + 34 = 54dp` of empty space below the pill, which looks
+  // visibly broken. Math.max keeps Android-without-inset at the 20dp
+  // baseline while letting iPhone / Android-gesture-nav use their
+  // natural inset, which is already a comfortable gap.
+  const insets = useSafeAreaInsets();
+  const tabBarBottomGap = Math.max(scale(20), insets.bottom);
   const tabs: {
     name: keyof DashboardTabParamList;
     icon: React.ComponentType<{ size: number; color: string }>;
@@ -146,7 +157,9 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
   ];
 
   return (
-    <View style={styles.bottomTabContainer}>
+    <View
+      style={[styles.bottomTabContainer, { marginBottom: tabBarBottomGap }]}
+    >
       <View style={styles.bottomTabContent}>
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -186,7 +199,7 @@ const CustomTabBar: React.FC<BottomTabBarProps> = ({ state, navigation }) => {
 /* ─── Navigator ─── */
 export const DashboardTabNavigator = () => {
   return (
-    <View style={{ flex: 1, backgroundColor: '#F8F9FC' }}>
+    <View style={styles.tabNavigatorRoot}>
       <Tab.Navigator
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{ headerShown: false }}
@@ -202,11 +215,17 @@ export const DashboardTabNavigator = () => {
 };
 
 const styles = StyleSheet.create({
+  tabNavigatorRoot: {
+    flex: 1,
+    backgroundColor: '#F8F9FC',
+  },
   bottomTabContainer: {
     backgroundColor: '#0D112B',
     borderRadius: scale(34),
     marginHorizontal: scale(14),
-    marginBottom: scale(20),
+    // `marginBottom` is provided by CustomTabBar at runtime so it can add
+    // the device's bottom safe-area inset (gesture handle / 3-button nav).
+    // Don't set marginBottom here or it will fight the runtime value.
     height: scale(64),
     justifyContent: 'center',
     shadowColor: '#94C23C',

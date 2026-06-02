@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { colors } from '../../../theme/colors';
 import { ArrowLeftLineIcon } from '../../atoms/Icon';
@@ -37,8 +38,12 @@ const AuthTemplate: React.FC<AuthTemplateProps> = ({
     : isSignIn 
       ? Math.round(screenHeight * 0.35) 
       : IMAGE_HEIGHT;
-  
-  const bottomPadding = footer ? scale(120) : scale(30);
+
+  // With edge-to-edge enabled the absolute footer would otherwise sit
+  // right on top of the gesture handle / 3-button nav. Pull in the
+  // device's bottom inset so the CTA stays tappable everywhere.
+  const insets = useSafeAreaInsets();
+  const bottomPadding = (footer ? scale(120) : scale(30)) + insets.bottom;
 
   return (
     <View style={styles.container}>
@@ -77,7 +82,11 @@ const AuthTemplate: React.FC<AuthTemplateProps> = ({
           {children}
         </ScrollView>
 
-        {footer && <View style={styles.footerContainer}>{footer}</View>}
+        {footer && (
+          <View style={[styles.footerContainer, { paddingBottom: insets.bottom }]}>
+            {footer}
+          </View>
+        )}
       </View>
     </View>
   );

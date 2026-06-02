@@ -15,11 +15,34 @@ import { logger } from './logger';
 
 type AnalyticsParams = Record<string, string | number | boolean>;
 
-const safe = (op: string, fn: () => Promise<unknown>): void => {
-  fn().catch(err => {
-    // Analytics is fire-and-forget — never throw out into UI code.
-    logger.debug(`[analytics] ${op} failed`, err);
-  });
+// Memoised flag — once we know Firebase isn't wired natively, every
+// subsequent call short-circuits. `analytics()` / `messaging()`
+// throw synchronously when no native config (GoogleService-Info.
+// plist on iOS, google-services.json on Android) is present, so we
+// have to wrap the factory call itself, not just the returned
+// promise.
+let firebaseUnavailable = false;
+
+const safe = (op: string, fn: () => Promise<unknown> | void): void => {
+  if (firebaseUnavailable) return;
+  try {
+    const result = fn();
+    if (result && typeof (result as Promise<unknown>).catch === 'function') {
+      (result as Promise<unknown>).catch(err => {
+        logger.debug(`[analytics] ${op} failed`, err);
+      });
+    }
+  } catch (err) {
+    const msg = (err as Error)?.message ?? String(err);
+    if (msg.includes('No Firebase App')) {
+      // Native config missing — disable analytics for the rest of the
+      // session so we don't spam the console.
+      firebaseUnavailable = true;
+      logger.info('[analytics] Firebase not configured natively, disabling');
+      return;
+    }
+    logger.debug(`[analytics] ${op} threw`, err);
+  }
 };
 
 // Track a screen view. Firebase's automatic screen tracking only

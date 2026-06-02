@@ -31,6 +31,27 @@ const ANDROID_CHANNEL_ID = 'la-default';
 // Android emulators without GMS will fail silently.
 let isInitialised = false;
 
+// Probe whether Firebase has a native `[DEFAULT]` app available.
+// On a fresh install without `GoogleService-Info.plist` /
+// `google-services.json`, calling `messaging()` throws synchronously
+// — we treat that as "Firebase not wired" and disable the whole
+// service for the rest of the process lifetime.
+const hasFirebaseApp = (): boolean => {
+  try {
+    messaging();
+    return true;
+  } catch (err) {
+    const msg = (err as Error)?.message ?? String(err);
+    if (msg.includes('No Firebase App')) {
+      logger.info('[notif] Firebase not configured natively, skipping init');
+      return false;
+    }
+    // Unknown error — log and bail so we don't crash the splash.
+    logger.warn('[notif] Firebase probe failed', err);
+    return false;
+  }
+};
+
 // Idempotent — safe to call from anywhere (Splash boot path,
 // post-login session restore, app-state change). All subsequent
 // calls become no-ops because we cache the `isInitialised` flag.
@@ -49,6 +70,13 @@ let isInitialised = false;
 // in (the device-token endpoint expects an authenticated request).
 export const initializeNotifications = async (): Promise<void> => {
   if (isInitialised) return;
+  if (!hasFirebaseApp()) {
+    // Pretend init succeeded so we don't try again on every dashboard
+    // re-mount. Native config is required to recover — re-run after
+    // dropping the plist / google-services.json into the app.
+    isInitialised = true;
+    return;
+  }
   isInitialised = true;
   try {
     await ensureAndroidChannel();

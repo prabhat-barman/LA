@@ -39,6 +39,27 @@ PODS:
   - Firebase/Crashlytics (12.10.0):
     - Firebase/CoreOnly
     - FirebaseCrashlytics (~> 12.10.0)
+  - Firebase/Messaging (12.10.0):
+    - Firebase/CoreOnly
+    - FirebaseMessaging (~> 12.10.0)
+  - FirebaseAnalytics/Core (12.10.0):
+    - FirebaseCore (~> 12.10.0)
+    - FirebaseInstallations (~> 12.10.0)
+    - GoogleAppMeasurement/Core (= 12.10.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
+  - FirebaseAnalytics/IdentitySupport (12.10.0):
+    - FirebaseCore (~> 12.10.0)
+    - FirebaseInstallations (~> 12.10.0)
+    - GoogleAppMeasurement/IdentitySupport (= 12.10.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
   - FirebaseCore (12.10.0):
     - FirebaseCoreInternal (~> 12.10.0)
     - GoogleUtilities/Environment (~> 8.1)
@@ -61,6 +82,15 @@ PODS:
     - GoogleUtilities/Environment (~> 8.1)
     - GoogleUtilities/UserDefaults (~> 8.1)
     - PromisesObjC (~> 2.4)
+  - FirebaseMessaging (12.10.0):
+    - FirebaseCore (~> 12.10.0)
+    - FirebaseInstallations (~> 12.10.0)
+    - GoogleDataTransport (~> 10.1)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/Reachability (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - nanopb (~> 3.30910.0)
   - FirebaseRemoteConfigInterop (12.10.0)
   - FirebaseSessions (12.10.0):
     - FirebaseCore (~> 12.10.0)
@@ -71,6 +101,19 @@ PODS:
     - GoogleUtilities/UserDefaults (~> 8.1)
     - nanopb (~> 3.30910.0)
     - PromisesSwift (~> 2.1)
+  - GoogleAppMeasurement/Core (12.10.0):
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
+  - GoogleAppMeasurement/IdentitySupport (12.10.0):
+    - GoogleAppMeasurement/Core (= 12.10.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/MethodSwizzler (~> 8.1)
+    - GoogleUtilities/Network (~> 8.1)
+    - "GoogleUtilities/NSData+zlib (~> 8.1)"
+    - nanopb (~> 3.30910.0)
   - GoogleDataTransport (10.1.0):
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
@@ -79,14 +122,30 @@ PODS:
     - AppCheckCore (~> 11.0)
     - GTMAppAuth (~> 5.0)
     - GTMSessionFetcher/Core (~> 3.3)
+  - GoogleUtilities/AppDelegateSwizzler (8.1.0):
+    - GoogleUtilities/Environment
+    - GoogleUtilities/Logger
+    - GoogleUtilities/Network
+    - GoogleUtilities/Privacy
   - GoogleUtilities/Environment (8.1.0):
     - GoogleUtilities/Privacy
   - GoogleUtilities/Logger (8.1.0):
     - GoogleUtilities/Environment
     - GoogleUtilities/Privacy
+  - GoogleUtilities/MethodSwizzler (8.1.0):
+    - GoogleUtilities/Logger
+    - GoogleUtilities/Privacy
+  - GoogleUtilities/Network (8.1.0):
+    - GoogleUtilities/Logger
+    - "GoogleUtilities/NSData+zlib"
+    - GoogleUtilities/Privacy
+    - GoogleUtilities/Reachability
   - "GoogleUtilities/NSData+zlib (8.1.0)":
     - GoogleUtilities/Privacy
   - GoogleUtilities/Privacy (8.1.0)
+  - GoogleUtilities/Reachability (8.1.0):
+    - GoogleUtilities/Logger
+    - GoogleUtilities/Privacy
   - GoogleUtilities/UserDefaults (8.1.0):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
@@ -1621,6 +1680,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-render-html (6.3.4):
+    - React-Core
   - react-native-safe-area-context (5.7.0):
     - hermes-engine
     - RCTRequired
@@ -2189,6 +2250,33 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNDeviceInfo (15.0.2):
+    - React-Core
+  - RNFBAnalytics (24.0.0):
+    - FirebaseAnalytics/Core (= 12.10.0)
+    - FirebaseAnalytics/IdentitySupport (= 12.10.0)
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNFBApp
+    - Yoga
   - RNFBApp (24.0.0):
     - Firebase/CoreOnly (= 12.10.0)
     - hermes-engine
@@ -2237,6 +2325,31 @@ PODS:
     - ReactNativeDependencies
     - RNFBApp
     - Yoga
+  - RNFBMessaging (24.0.0):
+    - Firebase/Messaging (= 12.10.0)
+    - FirebaseCoreExtension
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNFBApp
+    - Yoga
   - RNFS (2.20.0):
     - React-Core
   - RNGoogleSignin (16.1.2):
@@ -2262,6 +2375,11 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNNotifee (9.1.8):
+    - React-Core
+    - RNNotifee/NotifeeCore (= 9.1.8)
+  - RNNotifee/NotifeeCore (9.1.8):
+    - React-Core
   - RNPermissions (5.4.4):
     - hermes-engine
     - RCTRequired
@@ -2426,6 +2544,7 @@ DEPENDENCIES:
   - React-mutationobservernativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - "react-native-netinfo (from `../node_modules/@react-native-community/netinfo`)"
+  - react-native-render-html (from `../node_modules/react-native-render-html`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - react-native-video (from `../node_modules/react-native-video`)
   - react-native-webview (from `../node_modules/react-native-webview`)
@@ -2465,10 +2584,14 @@ DEPENDENCIES:
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - "RNAppleAuthentication (from `../node_modules/@invertase/react-native-apple-authentication`)"
   - RNBootSplash (from `../node_modules/react-native-bootsplash`)
+  - RNDeviceInfo (from `../node_modules/react-native-device-info`)
+  - "RNFBAnalytics (from `../node_modules/@react-native-firebase/analytics`)"
   - "RNFBApp (from `../node_modules/@react-native-firebase/app`)"
   - "RNFBCrashlytics (from `../node_modules/@react-native-firebase/crashlytics`)"
+  - "RNFBMessaging (from `../node_modules/@react-native-firebase/messaging`)"
   - RNFS (from `../node_modules/react-native-fs`)
   - "RNGoogleSignin (from `../node_modules/@react-native-google-signin/google-signin`)"
+  - "RNNotifee (from `../node_modules/@notifee/react-native`)"
   - RNPermissions (from `../node_modules/react-native-permissions`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
@@ -2479,13 +2602,16 @@ SPEC REPOS:
     - AppAuth
     - AppCheckCore
     - Firebase
+    - FirebaseAnalytics
     - FirebaseCore
     - FirebaseCoreExtension
     - FirebaseCoreInternal
     - FirebaseCrashlytics
     - FirebaseInstallations
+    - FirebaseMessaging
     - FirebaseRemoteConfigInterop
     - FirebaseSessions
+    - GoogleAppMeasurement
     - GoogleDataTransport
     - GoogleSignIn
     - GoogleUtilities
@@ -2590,6 +2716,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-image-picker"
   react-native-netinfo:
     :path: "../node_modules/@react-native-community/netinfo"
+  react-native-render-html:
+    :path: "../node_modules/react-native-render-html"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   react-native-video:
@@ -2668,14 +2796,22 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@invertase/react-native-apple-authentication"
   RNBootSplash:
     :path: "../node_modules/react-native-bootsplash"
+  RNDeviceInfo:
+    :path: "../node_modules/react-native-device-info"
+  RNFBAnalytics:
+    :path: "../node_modules/@react-native-firebase/analytics"
   RNFBApp:
     :path: "../node_modules/@react-native-firebase/app"
   RNFBCrashlytics:
     :path: "../node_modules/@react-native-firebase/crashlytics"
+  RNFBMessaging:
+    :path: "../node_modules/@react-native-firebase/messaging"
   RNFS:
     :path: "../node_modules/react-native-fs"
   RNGoogleSignin:
     :path: "../node_modules/@react-native-google-signin/google-signin"
+  RNNotifee:
+    :path: "../node_modules/@notifee/react-native"
   RNPermissions:
     :path: "../node_modules/react-native-permissions"
   RNScreens:
@@ -2692,13 +2828,16 @@ SPEC CHECKSUMS:
   BVLinearGradient: cb006ba232a1f3e4f341bb62c42d1098c284da70
   FBLazyVector: 24e62c765683b8d89006a88a2c8f5cf019f0074d
   Firebase: 99f203d3a114c6ba591f3b32263a9626e450af65
+  FirebaseAnalytics: ef2970f65f3a2807e8f47a49cf3b8719d53e9fce
   FirebaseCore: f4428e22415ea3b3eca652c2098413dabf2a23a9
   FirebaseCoreExtension: 3473a6ec16a91aee29fb75994a86c0220d2cddf3
   FirebaseCoreInternal: e7bbaeb00ab73011298f35ed223aa7371e212948
   FirebaseCrashlytics: cd1baeb80302ec5ea1012f732ab94df7d76f09f7
   FirebaseInstallations: 047343aa91fd6a1ebfa3eb374ddecf36a8aaddfd
+  FirebaseMessaging: ed18fb50634e6e85b5d3e77e628c21e2c928cc53
   FirebaseRemoteConfigInterop: a169873f4093b241eb5e27a4fbad91af36d64b8d
   FirebaseSessions: dba7635960740ad77cc2f3387d90ff22a7942f82
+  GoogleAppMeasurement: 57270ccc2b77472d7e85c4cbe45972564eff78bb
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleSignIn: fcee2257188d5eda57a5e2b6a715550ffff9206d
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
@@ -2751,6 +2890,7 @@ SPEC CHECKSUMS:
   React-mutationobservernativemodule: a42d1626651ccd7d0dc02a56e69d4ec77c248893
   react-native-image-picker: 23540feacc79c63c60857f318fdfa8477c26e70a
   react-native-netinfo: 2f906d5d9a639090ed1c079135d6485a95f749f1
+  react-native-render-html: 5afc4751f1a98621b3009432ef84c47019dcb2bd
   react-native-safe-area-context: 6b4966397ada0f7dd481e4486a2ef936834861a1
   react-native-video: db3a70efc9fa0c00f5499d7798283bf0585cbd37
   react-native-webview: 2da09bdea1aeb6c46e27dd94632e21059cade6c1
@@ -2790,10 +2930,14 @@ SPEC CHECKSUMS:
   ReactNativeDependencies: e50ec32a805a4d094ee2b0db25c4507460777856
   RNAppleAuthentication: a89c9804592b38ed4ab11f0aee68d05ba12ad432
   RNBootSplash: 65ee0b8120092c12ef024d082016a0ab6bcf035e
+  RNDeviceInfo: 4c852998208b60dc192ae3529e5867817719ad1e
+  RNFBAnalytics: 59fddff4137df0bc3aa079ec5e06baf12a372928
   RNFBApp: c7b81d8adc895bda3a91e2a4c45199b35096350e
   RNFBCrashlytics: 3343272e8a9f73d95935cc68989da42ff9baebed
+  RNFBMessaging: 631c595f2484cba4857fa69f58561ecc212b9c7e
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
   RNGoogleSignin: 0d72ae233fe10522497424748acf00fcc1ed2ee7
+  RNNotifee: 5e3b271e8ea7456a36eec994085543c9adca9168
   RNPermissions: 1d29cccc2b27675f5352566ac9db86b75444c32b
   RNScreens: a6a509f05ea74d50abab8c21b319b33cfca1ea1c
   RNSVG: 0e52210d4d43165e7e2cf9c890a9848b27e513ac

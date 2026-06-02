@@ -15,7 +15,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { Header } from '../../../components/organisms/Header';
-import { Tooltip } from '../../../components/organisms/Tooltip';
 import { CircularProgressBar } from '../../../components/atoms/CircularProgressBar';
 import { DashboardSkeleton } from '../../../components/atoms/Skeleton';
 import { DatePickerModal } from '../../../components/molecules/DatePickerModal';
@@ -52,7 +51,6 @@ import {
   markPopupVideoShownToday,
   shouldShowPopupVideoToday,
 } from '../../../services/popupVideoStorage';
-import { TOUR_KEYS } from '../../../services/tourStorage';
 import { SmartVideoPlayer } from '../../Videos/SmartVideoPlayer';
 import { FeedbackModal } from '../FeedbackModal';
 
@@ -753,20 +751,6 @@ export const DashboardScreen = () => {
         visible={feedbackModalVisible}
         onClose={() => setFeedbackModalVisible(false)}
         showToast={showToast}
-      />
-
-      <Tooltip
-        tourKey={TOUR_KEYS.DashboardWelcome}
-        title="Welcome to your dashboard"
-        body="Track your progress, set daily goals, and jump straight into practice or a mock test. Tap the bottom tabs to explore."
-        ctaLabel="Let\u2019s go"
-      />
-
-      <Tooltip
-        tourKey={TOUR_KEYS.DashboardCategories}
-        dependsOn={[TOUR_KEYS.DashboardWelcome]}
-        title="Pick a skill to practice"
-        body="Tap any of Speaking / Writing / Reading / Listening to drill into question types and start practicing. Your progress in each appears as you go."
       />
 
       <DatePickerModal

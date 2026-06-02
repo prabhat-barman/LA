@@ -13,11 +13,9 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { SubHeader } from '../../../components/molecules/SubHeader';
-import { Tooltip } from '../../../components/organisms/Tooltip';
 import { colors } from '../../../theme/colors';
 import { isPteCore } from '../../../config/appVariantConfig';
 import type { RootStackParamList } from '../../../navigation/AppNavigator';
-import { TOUR_KEYS } from '../../../services/tourStorage';
 
 import { SubcategoryProgressCard } from './components/SubcategoryProgressCard';
 import { useProgressData } from './hooks/useProgressData';
@@ -212,11 +210,6 @@ export const ProgressTrackerScreen: React.FC = () => {
         {renderBody()}
       </ScrollView>
 
-      <Tooltip
-        tourKey={TOUR_KEYS.ProgressTrackerIntro}
-        title="Track your improvement"
-        body="Watch your accuracy per skill and per question type as you log more attempts. Tap any skill tab above to drill in."
-      />
     </View>
   );
 };

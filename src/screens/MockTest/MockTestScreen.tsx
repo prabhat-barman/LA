@@ -774,7 +774,12 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
                           onPress={() => handleAction(action, test)}
                           disabled={isLoading}
                         >
-                          <Text style={[styles.actionLinkText, isLoading && { opacity: 0.5 }]}>
+                          <Text
+                            style={[
+                              styles.actionLinkText,
+                              isLoading && styles.actionLinkTextLoading,
+                            ]}
+                          >
                             {isLoading ? '...' : action}
                           </Text>
                         </TouchableOpacity>
@@ -1169,6 +1174,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textDecorationLine: 'underline',
     fontFamily: 'BricolageGrotesque-SemiBold',
+  },
+  // Half-opacity overlay applied while the action is mid-flight.
+  // Lives in the stylesheet (not inline) so the linter's
+  // no-inline-styles rule stays satisfied and the dimmed state
+  // gets the same scale-aware treatment as the rest of the file.
+  actionLinkTextLoading: {
+    opacity: 0.5,
   },
   stateContainer: {
     alignItems: 'center',

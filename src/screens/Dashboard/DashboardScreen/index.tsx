@@ -104,10 +104,9 @@ export const DashboardScreen = () => {
   );
   // Post-login YouTube welcome popup. Backend ships an id (or
   // sometimes a full youtube URL) at
-  // `dashboardData.data.popup_video.youtube_vid`. We only ever pop
-  // it once per login, gated by the `auth:just_logged_in_v1` flag,
-  // so the user doesn't see the same welcome video on every cold
-  // start.
+  // `dashboardData.data.popup_video.youtube_vid`. Suppressed via a
+  // per-day AsyncStorage marker so the user sees the welcome video
+  // at most once per calendar day, even across cold starts.
   const [popupVideoUrl, setPopupVideoUrl] = useState<string | null>(null);
   const popupShownRef = useRef(false);
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);

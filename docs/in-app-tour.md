@@ -1,8 +1,8 @@
-# In-app tour — current state + remaining sites
+# In-app tour — current state
 
-This branch lays the foundation for the first-time-user tour /
-walkthrough flow. One site is wired (Dashboard welcome); the rest
-are sketched here as concrete follow-up tickets.
+All five tour sites are wired. The Tooltip component handles the
+"show once on first mount, persist seen flag, never re-show again"
+behaviour automatically.
 
 ## What ships in this branch
 
@@ -10,45 +10,46 @@ are sketched here as concrete follow-up tickets.
   the canonical `TOUR_KEYS` map, plus `hasSeenTour` /
   `markTourSeen` / `resetAllTours`.
 - `src/components/organisms/Tooltip/Tooltip.tsx` — centred modal
-  card that surfaces once per `tourKey` and persists the dismiss
-  flag automatically.
-- One wired tour: Dashboard welcome modal — see
-  `<Tooltip tourKey={TOUR_KEYS.DashboardWelcome} ... />` in
-  `DashboardScreen/index.tsx`.
+  card with optional `dependsOn` prerequisite chaining so multiple
+  tooltips on the same screen don't stack on top of each other.
 
-## Wiring a new tour site (3 lines)
+## Wired sites
+
+| Tour key                  | Mounted in                                              | Depends on              |
+|---------------------------|---------------------------------------------------------|-------------------------|
+| `DashboardWelcome`        | `DashboardScreen/index.tsx`                             | —                       |
+| `DashboardCategories`     | `DashboardScreen/index.tsx`                             | `DashboardWelcome`      |
+| `PracticeFirstQuestion`   | `Practice/PracticeQuestionDetail/index.tsx`             | —                       |
+| `MockTestPrerequisite`    | `MockTest/MockTestPrerequisite/index.tsx`               | —                       |
+| `ProgressTrackerIntro`    | `Progress/ProgressTracker/index.tsx`                    | —                       |
+
+## Adding a new tour site
 
 ```tsx
 import { Tooltip } from '../../../components/organisms/Tooltip';
 import { TOUR_KEYS } from '../../../services/tourStorage';
 
 <Tooltip
-  tourKey={TOUR_KEYS.PracticeFirstQuestion}
-  title="Your first practice question"
-  body="Tap a category card, pick a question, and submit — you'll get instant AI feedback."
+  tourKey={TOUR_KEYS.YourNewKey}
+  title="Headline"
+  body="One-paragraph body copy."
 />
 ```
 
-The Tooltip handles "show on first mount, persist seen flag, never
-re-show" automatically.
+Add the new key to `TOUR_KEYS` in `src/services/tourStorage.ts`
+first. Chain it after another tooltip on the same screen by
+passing `dependsOn={[TOUR_KEYS.OtherKey]}`.
 
-## Remaining sites (declared keys, not yet wired)
+## Resetting tours during QA
 
-The following keys exist in `TOUR_KEYS` and need a `<Tooltip>` mount
-on the corresponding screen. Pick them up in any order:
-
-| Tour key                       | Where it goes                           | What it should say |
-|--------------------------------|-----------------------------------------|--------------------|
-| `DashboardCategories`          | DashboardScreen — first category card   | "Tap any skill to drill into question types and start practicing." |
-| `PracticeFirstQuestion`        | PracticeQuestionDetail — first opening  | "Listen to the question, record / type your answer, then tap Submit to get scored." |
-| `MockTestPrerequisite`         | MockTestPrerequisite — first opening    | "Mocks are timed end-to-end. Make sure you have ~3 hours and a stable internet connection before starting." |
-| `ProgressTrackerIntro`         | ProgressTracker — first opening         | "Watch your accuracy per skill and per question type as you log more attempts." |
+Call `resetAllTours()` from `src/services/tourStorage.ts` (e.g.
+from a dev menu) to wipe every `tour:seen_v1:*` AsyncStorage flag
+so all tooltips show again on next launch.
 
 ## Follow-up: anchored tooltips
 
 The current Tooltip is a centred modal card. To get arrow-anchored
-tooltips that attach to a specific UI element (Figma-style),
-install `react-native-walkthrough-tooltip` and replace the
-`<Modal>` host inside `Tooltip.tsx`. The public API
-(`tourKey/title/body/ctaLabel/onDismiss`) is intentionally stable —
-no call sites should need to change.
+tooltips that attach to a specific UI element, install
+`react-native-walkthrough-tooltip` and replace the `<Modal>` host
+inside `Tooltip.tsx`. The public API is intentionally stable — no
+call sites should need to change.

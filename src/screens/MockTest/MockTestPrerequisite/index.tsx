@@ -12,7 +12,9 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Tooltip } from '../../../components/organisms/Tooltip';
 import type { RootStackParamList } from '../../../navigation/AppNavigator';
+import { TOUR_KEYS } from '../../../services/tourStorage';
 import { useMockSession } from '../MockTestRunner/hooks/useMockSession';
 import HeadsetCheckSlide from './components/HeadsetCheckSlide';
 import IntroRecordingSlide from './components/IntroRecordingSlide';
@@ -339,6 +341,12 @@ export const MockTestPrerequisiteScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <Tooltip
+        tourKey={TOUR_KEYS.MockTestPrerequisite}
+        title="Before you start"
+        body="Mocks are timed end-to-end. Make sure you have ~3 hours, a stable internet connection, and a quiet environment. Walk through these checks once and you're set."
+      />
     </View>
   );
 };

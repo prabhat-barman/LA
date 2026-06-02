@@ -85,8 +85,10 @@ import { NavigationFooter } from './components/NavigationFooter';
 import { MockRunnerBridge } from './components/MockRunnerBridge';
 import { QuestionContent } from './components/QuestionContent';
 import { QuestionMetaBlock } from './components/QuestionMetaBlock';
+import { Tooltip } from '../../../components/organisms/Tooltip';
 import { WordDefinitionModal } from '../../../components/organisms/WordDefinitionModal';
 import { useSubmitExplanation } from '../../../hooks/useSubmitExplanation';
+import { TOUR_KEYS } from '../../../services/tourStorage';
 import { ReportIssueModal } from './components/ReportIssueModal';
 import { ScoreResultModal } from './components/ScoreResultModal';
 import { TagPickerDropdown } from './components/TagPickerDropdown';
@@ -1418,6 +1420,12 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         visible={lookupWord !== null}
         word={lookupWord ?? ''}
         onClose={() => setLookupWord(null)}
+      />
+
+      <Tooltip
+        tourKey={TOUR_KEYS.PracticeFirstQuestion}
+        title="Your first practice question"
+        body="Read or listen to the prompt, record/type your answer, then tap Submit to get scored. Long-press any word in the passage to look it up in the dictionary."
       />
     </View>
   );

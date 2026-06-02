@@ -15,12 +15,13 @@ interface TooltipProps {
   tourKey: TourKey;
   title: string;
   body: string;
-  // Optional anchor reference — when omitted the tooltip renders as
-  // a centred modal card. (Full positional-anchor support is
-  // out-of-scope for the scaffold; see the TODO file for the
-  // follow-up work.)
   ctaLabel?: string;
   onDismiss?: () => void;
+  // Optional prerequisite tour keys — this tooltip will not appear
+  // until ALL of these have been marked as seen. Lets us chain
+  // multiple tooltips on the same screen (e.g. "welcome" → "tap a
+  // skill card") without stacking modals on top of each other.
+  dependsOn?: readonly TourKey[];
 }
 
 // Minimal first-time-user tooltip. Stores its "shown once" flag in
@@ -38,19 +39,41 @@ export const Tooltip: React.FC<TooltipProps> = ({
   body,
   ctaLabel = 'Got it',
   onDismiss,
+  dependsOn,
 }) => {
   const [visible, setVisible] = useState(false);
 
+  // We re-check every 600ms while the tooltip is gated on a
+  // prerequisite — this is the simplest cross-component "did
+  // another tooltip get dismissed" signal without wiring a global
+  // event bus. Polling stops as soon as we show (or unmount).
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const evaluate = async () => {
       const seen = await hasSeenTour(tourKey);
-      if (!cancelled && !seen) setVisible(true);
-    })();
+      if (cancelled || seen) return;
+      if (dependsOn && dependsOn.length > 0) {
+        const seenFlags = await Promise.all(dependsOn.map(k => hasSeenTour(k)));
+        if (seenFlags.some(s => !s)) return; // still waiting
+      }
+      if (!cancelled) {
+        setVisible(true);
+        if (interval) clearInterval(interval);
+      }
+    };
+
+    evaluate();
+    if (dependsOn && dependsOn.length > 0) {
+      interval = setInterval(evaluate, 600);
+    }
+
     return () => {
       cancelled = true;
+      if (interval) clearInterval(interval);
     };
-  }, [tourKey]);
+  }, [tourKey, dependsOn]);
 
   const handleDismiss = useCallback(async () => {
     setVisible(false);

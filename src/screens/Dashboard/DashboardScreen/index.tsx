@@ -721,6 +721,13 @@ export const DashboardScreen = () => {
         ctaLabel="Let\u2019s go"
       />
 
+      <Tooltip
+        tourKey={TOUR_KEYS.DashboardCategories}
+        dependsOn={[TOUR_KEYS.DashboardWelcome]}
+        title="Pick a skill to practice"
+        body="Tap any of Speaking / Writing / Reading / Listening to drill into question types and start practicing. Your progress in each appears as you go."
+      />
+
       <DatePickerModal
         visible={examDatePickerVisible}
         onClose={() => setExamDatePickerVisible(false)}

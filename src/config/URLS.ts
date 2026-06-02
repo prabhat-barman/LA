@@ -20,7 +20,7 @@ import { BASE_URL } from "./Config";
 // you start using so this stays accurate.
 //
 // Audit summary (last updated Jun 2026):
-//   61 USED · 3 PTE-CORE · 17 UNUSED   (total: 81)
+//   65 USED · 3 PTE-CORE · 8 UNUSED   (total: 76)
 //   — 22 per-question-type constants removed (replaced by dynamic
 //     `LIST_QUESTION/{categoryId}` calls)
 //   — REMAINING_MOCK + SUBMIT_FAILED_MOCK wired into MockTestRunner
@@ -28,6 +28,10 @@ import { BASE_URL } from "./Config";
 //   — 7 exact-URL duplicates removed (GOOGLE_SOCIAL_LOGIN,
 //     APPLE_SOCIAL_LOGIN, MOCK_TUTOR_FEEDBACK, MOCK_VIEW_FEEDBACK,
 //     REPORT_QUESTION, PROGRESS_DETAIL, DELETE_NOTIFICATION)
+//   — Legacy-parity round: PREDICTION_COUNT, TESTED_EXAM,
+//     SUBMIT_QUERY, CANCEL_SUBSCRIPTION dropped (dead in old project
+//     too); DEVICE_TOKEN_USER / GET_ALL_BRANCHES / PRACTICE_DETAIL /
+//     SUBMIT_EXPLANATION / WORD_DEFINITION wired into real screens
 //
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -44,10 +48,9 @@ const URLS: Record<string, string> = {
   FORGOTPASSWORD: "forgot",                        // USED — ForgotPasswordScreen
   RESET_FORGOTPASSWORD: "reset-password",          // USED — NewPasswordScreen
   DEVICE_TOKEN: "deviceToken",                     // USED — DashboardDataContext / ProfileScreen
-  DEVICE_TOKEN_USER: "deviceToken/user",           // UNUSED
+  DEVICE_TOKEN_USER: "deviceToken/user",           // USED — notificationService (PUT fcm_token)
   GOOGLE_LOGIN: "googleSignUp",                    // USED — socialAuthService
   APPLE_LOGIN: "appleSignUp",                      // USED — socialAuthService
-  PREDICTION_COUNT: "/prediction/count",           // UNUSED
   ONBOARDING: "onboarding",                        // USED — DashboardDataContext
   SET_TIMEZONE: "setTimezone",                     // USED — DashboardDataContext
 
@@ -88,7 +91,7 @@ const URLS: Record<string, string> = {
   SUBMIT_ANSWER: "check/answer2",                  // USED — PracticeQuestionDetail
   PTE_CORE_SUBMIT_ANSWER: "submit/practice",       // USED — PracticeQuestionDetail (direct, not via resolver)
   SET_TAG: "set/tag",                              // USED — PracticeQuestionDetail / PracticeCommonList / DailyFeedback
-  PRACTICE_DETAIL: "practiceDetail",               // UNUSED — superseded by SINGLE_PRACTICE_DETAIL
+  PRACTICE_DETAIL: "practiceDetail",               // USED — PracticeHistoryCalendarScreen (per-date question detail)
   SINGLE_PRACTICE_DETAIL: "single/practiceDetail", // USED — DailyFeedbackDetailScreen
   SHOW_HISTORY: "show/history",                    // USED — PracticeQuestionDetail
   TEXT_TRANSLATION: "translate/sentence",          // USED — PracticeQuestionDetail
@@ -117,15 +120,14 @@ const URLS: Record<string, string> = {
 
   // ── Progress ───────────────────────────────────────────────────────────
   PROGRESS_TRACKER: "progress",                    // USED — useProgressData (`progress/{skillId}?mock=0`)
-  TESTED_EXAM: "tested/exam",                      // UNUSED
-  DAILY_REPORT: "mock/daily-report",               // USED — DailyFeedbackListScreen
+  DAILY_REPORT: "mock/daily-report",               // USED — DailyFeedbackListScreen / useDailyGoals / PracticeHistoryCalendar
 
   // ── Videos / Templates / Predictions ───────────────────────────────────
   PTE_VIDEOS: "get-stgy-videos",                   // USED — useStrategyVideos
   PREDICTION_DATA: "prediction/list",              // USED — MenuScreen
   TEMPLATE_DATA: "template/list?skip=",            // USED — MenuScreen
   HELP_DATA: "template/listNew?skip=0&type=1",     // USED — MenuScreen
-  SUBMIT_EXPLANATION: "submit-explanation",        // UNUSED
+  SUBMIT_EXPLANATION: "submit-explanation",        // USED — useSubmitExplanation (Practice post-submit AI explanation)
 
   // ── Notifications ──────────────────────────────────────────────────────
   GET_NOTIFICATIONS: "getNotifications",           // USED — NotificationsListScreen / DashboardDataContext
@@ -134,8 +136,7 @@ const URLS: Record<string, string> = {
   // ── Support / Contact ──────────────────────────────────────────────────
   CONTACT_US: "post/contact",                      // USED — ContactSupportScreen
   CONTACT_DETAILS: "contact-details",              // USED — ContactSupportScreen
-  SUBMIT_QUERY: "submit-query",                    // UNUSED
-  GET_ALL_BRANCHES: "getAllBranches",              // UNUSED
+  GET_ALL_BRANCHES: "getAllBranches",              // USED — BookTrialClassScreen (live branch dropdown)
   SUBMIT_FEEDBACK: "feedback/app",                 // USED — FeedbackModal
 
   // ── Live sessions / Tasks ──────────────────────────────────────────────
@@ -158,12 +159,11 @@ const URLS: Record<string, string> = {
   DELETE_COMMENT: "delete/question/comment",       // UNUSED — FUTURE
 
   // ── Misc unused ────────────────────────────────────────────────────────
-  DELETE_ME: "delete/question/responseNew",        // UNUSED
-  WORD_DEFINITION: "word/definition",              // UNUSED — FUTURE (dictionary lookup)
+  DELETE_ME: "delete/question/responseNew",        // UNUSED — FUTURE (own-response delete; part of Me/Notes/Discussion family)
+  WORD_DEFINITION: "word/definition",              // USED — Practice word-select dictionary lookup
 
   // ── Subscription / Packages ────────────────────────────────────────────
   GET_PACKAGES: "getPackages",                     // USED — useSubscriptionPackages
-  CANCEL_SUBSCRIPTION: "cancel-subscription",      // UNUSED — FUTURE (cancel flow not built)
 };
 
 export default URLS;

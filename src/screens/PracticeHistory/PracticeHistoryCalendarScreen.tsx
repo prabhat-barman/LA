@@ -29,12 +29,76 @@ interface DaySummary {
   perSkill: Partial<Record<DailyGoalSkill, number>>;
 }
 
+// One row in the per-question-type breakdown. `count` is normalised
+// across the heterogeneous shapes the `practiceDetail` endpoint can
+// emit (number, `{attempt}`, `{total}`, array length…).
+interface PerTypeRow {
+  questionTypeId: string;
+  count: number;
+}
+
 const todayApi = (): string => {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+};
+
+// `practiceDetail` keys days as `dd-mm-yyyy`; the calendar's
+// selected value is the api-shaped `yyyy-mm-dd`. Two formats
+// because that's what the backend ships, not a design choice.
+const apiToDetailKey = (apiDate: string): string => {
+  const [y, m, d] = apiDate.split('-');
+  if (!y || !m || !d) return apiDate;
+  return `${d}-${m}-${y}`;
+};
+
+// Friendly labels for the 22 question-type ids the practice detail
+// endpoint returns. Mirrors the legacy app's `baseDailyTasksItems`
+// table. Unknown ids fall back to "Type {id}" so the UI never
+// crashes on new question categories.
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  '1': 'Read Aloud',
+  '2': 'Repeat Sentence',
+  '3': 'Describe Image',
+  '4': 'Re-tell Lecture',
+  '5': 'Answer Short Questions',
+  '6': 'Summarize Written Text',
+  '7': 'Write Essay',
+  '8': 'Reading MCQ Single',
+  '9': 'Reading MCQ Multiple',
+  '10': 'Re-order Paragraphs',
+  '11': 'Reading FIB',
+  '12': 'R&W FIB',
+  '13': 'Summarize Spoken Text',
+  '14': 'Listening MCQ Single',
+  '15': 'Listening MCQ Multiple',
+  '16': 'Listening FIB',
+  '17': 'Highlight Correct Summary',
+  '18': 'Select Missing Word',
+  '19': 'Highlight Incorrect Words',
+  '20': 'Write From Dictation',
+  '21': 'Respond to Situation',
+  '22': 'Summarize Group Discussion',
+};
+
+// `practiceDetail` payloads are shaped inconsistently — sometimes a
+// raw count, sometimes a record with `attempt`/`total` keys,
+// sometimes a list of attempts. This unwraps them all to a single
+// integer.
+const normaliseCount = (raw: unknown): number => {
+  if (typeof raw === 'number') return raw;
+  if (Array.isArray(raw)) return raw.length;
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (typeof obj.attempt === 'number') return obj.attempt;
+    if (typeof obj.total === 'number') return obj.total;
+    if (typeof obj.count === 'number') return obj.count;
+    return Object.keys(obj).length;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
 };
 
 // Pull a single day's report. Same endpoint the Daily Goals screen
@@ -62,19 +126,53 @@ const fetchDay = async (date: string): Promise<DaySummary> => {
   }
 };
 
+// Per-question-type breakdown via the legacy `practiceDetail`
+// endpoint. The returned shape is
+//   { data: { "<dd-mm-yyyy>": { "<questionTypeId>": <count|obj|array> } } }
+// We tolerate variations and silently swallow failures — the
+// breakdown is a nice-to-have on top of the DAILY_REPORT summary.
+const fetchPerType = async (apiDate: string): Promise<PerTypeRow[]> => {
+  try {
+    const res = await apiClient.get(API_ENDPOINTS.PRACTICE_DETAIL, {
+      params: { date: apiDate },
+    });
+    const root = res.data?.data ?? res.data ?? {};
+    const detailKey = apiToDetailKey(apiDate);
+    const dayBucket = (root as Record<string, unknown>)[detailKey];
+    if (!dayBucket || typeof dayBucket !== 'object') return [];
+    const rows: PerTypeRow[] = [];
+    for (const [questionTypeId, raw] of Object.entries(
+      dayBucket as Record<string, unknown>,
+    )) {
+      const count = normaliseCount(raw);
+      if (count > 0) rows.push({ questionTypeId, count });
+    }
+    rows.sort((a, b) => b.count - a.count);
+    return rows;
+  } catch (err) {
+    logger.warn('[PracticeHistory] fetchPerType failed', err);
+    return [];
+  }
+};
+
 export const PracticeHistoryCalendarScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [selected, setSelected] = useState<string>(() => todayApi());
   const [summary, setSummary] = useState<DaySummary | null>(null);
+  const [perType, setPerType] = useState<PerTypeRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const next = await fetchDay(selected);
+      const [day, types] = await Promise.all([
+        fetchDay(selected),
+        fetchPerType(selected),
+      ]);
       if (!cancelled) {
-        setSummary(next);
+        setSummary(day);
+        setPerType(types);
         setLoading(false);
       }
     })();
@@ -157,6 +255,21 @@ export const PracticeHistoryCalendarScreen: React.FC = () => {
             </Text>
           )}
         </View>
+
+        {!loading && perType.length > 0 && (
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>By question type</Text>
+            {perType.map(row => (
+              <View key={row.questionTypeId} style={styles.summaryRow}>
+                <Text style={styles.summaryRowLabel}>
+                  {QUESTION_TYPE_LABELS[row.questionTypeId] ??
+                    `Type ${row.questionTypeId}`}
+                </Text>
+                <Text style={styles.summaryRowValue}>{row.count}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -177,6 +290,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     marginHorizontal: scale(16),
+    marginBottom: scale(12),
     padding: scale(16),
     borderRadius: scale(12),
     backgroundColor: '#F8FAFC',

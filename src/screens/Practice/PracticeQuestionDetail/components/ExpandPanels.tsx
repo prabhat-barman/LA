@@ -120,6 +120,48 @@ interface SamplePanelProps {
   categoryId?: number;
 }
 
+interface ExplanationPanelProps {
+  visible: boolean;
+  loading: boolean;
+  text: string | null;
+  error: string | null;
+}
+
+// Inline panel that surfaces the post-submit "why" copy returned by
+// the `SUBMIT_EXPLANATION` endpoint. Shown only after a successful
+// submit on Reading/Listening MCQ and FIB categories — the screen
+// gates `visible` accordingly.
+export const ExplanationPanel: React.FC<ExplanationPanelProps> = ({
+  visible,
+  loading,
+  text,
+  error,
+}) => {
+  if (!visible) return null;
+  return (
+    <View style={styles.inlineExpandPanel}>
+      <Text style={styles.expandPanelTitle}>Explanation</Text>
+      {loading ? (
+        <ActivityIndicator
+          size="small"
+          color="#007AFF"
+          style={{ marginVertical: scale(10) }}
+        />
+      ) : error ? (
+        <Text style={styles.expandPanelText}>
+          Couldn&apos;t load explanation. Please try again later.
+        </Text>
+      ) : text ? (
+        <Text style={styles.expandPanelText}>{text}</Text>
+      ) : (
+        <Text style={styles.expandPanelText}>
+          Submit your answer to see an explanation.
+        </Text>
+      )}
+    </View>
+  );
+};
+
 export const SamplePanel: React.FC<SamplePanelProps> = ({
   visible,
   questionDetails,

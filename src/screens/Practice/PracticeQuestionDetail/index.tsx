@@ -46,6 +46,7 @@ import {
   cleanHtmlText,
   getMissingAnswerToast,
   isDictationCategory,
+  isFibCategory,
   isMcqCategory,
   isMcqMultipleCategory,
   isOptionCorrect,
@@ -72,6 +73,7 @@ import { AttemptsHistorySection } from './components/AttemptsHistorySection';
 import { CardActionsRow } from './components/CardActionsRow';
 import { CardFooter } from './components/CardFooter';
 import {
+  ExplanationPanel,
   SamplePanel,
   TranscriptPanel,
   TranslationPanel,
@@ -83,6 +85,8 @@ import { NavigationFooter } from './components/NavigationFooter';
 import { MockRunnerBridge } from './components/MockRunnerBridge';
 import { QuestionContent } from './components/QuestionContent';
 import { QuestionMetaBlock } from './components/QuestionMetaBlock';
+import { WordDefinitionModal } from '../../../components/organisms/WordDefinitionModal';
+import { useSubmitExplanation } from '../../../hooks/useSubmitExplanation';
 import { ReportIssueModal } from './components/ReportIssueModal';
 import { ScoreResultModal } from './components/ScoreResultModal';
 import { TagPickerDropdown } from './components/TagPickerDropdown';
@@ -194,6 +198,11 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   // both the conditional render below and the validation path in
   // `submitAnswer`.
   const isRunnerBridge = isRunnerBridgeCategory(categoryId);
+  // Categories where a post-submit textual explanation makes sense
+  // (MCQ + FIB-style questions where the answer has a clear
+  // "right vs wrong" semantic). Mirrors the legacy app's hook.
+  const isFib = isFibCategory(categoryId);
+  const supportsExplanation = isMcq || isFib;
   const [runnerDraft, setRunnerDraft] = useState<RunnerAnswerDraft>(
     () => ({ kind: 'empty' as const }),
   );
@@ -284,7 +293,12 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
   const [selectedFilter, setSelectedFilter] = useState<SortFilter>('Latest');
   const [showTranslation, setShowTranslation] = useState(false);
   const [showSampleResponse, setShowSampleResponse] = useState(false);
+  // Word-lookup modal state. `lookupWord` is the cleaned token tapped
+  // inside any passage / situation prompt; setting it opens the
+  // dictionary modal, clearing it closes the modal.
+  const [lookupWord, setLookupWord] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
 
   const isCore = isPteCore();
 
@@ -507,6 +521,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
       setQuestionDetails(null);
       setTranslationText(null);
       setScoreResult(null);
+      setShowExplanation(false);
       setIsSubmitting(false);
       setTypedResponse('');
       setIsFixedInputFocused(false);
@@ -693,6 +708,12 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     }
   }, [additionalDetails, currentQuestionId, selectedReason, showToast]);
 
+  // Post-submit explanation fetch (FIB + MCQ only). The hook keeps a
+  // per-question cache that resets when `currentQuestionId` changes.
+  // Declared above `submitAnswer` so the submit callback can fire it
+  // without TDZ issues.
+  const explanation = useSubmitExplanation(currentQuestionId);
+
   const submitAnswer = useCallback(async () => {
     // Built up-front for the runner-bridge categories so the
     // validation guard and the payload-build path agree on the
@@ -831,6 +852,25 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
 
       setScoreResult(data);
 
+      // Kick off the secondary explanation fetch (MCQ + FIB only).
+      // Fire-and-forget — the panel renders its own loading state.
+      if (supportsExplanation && currentQuestionId) {
+        const correctAnswer = isMcq
+          ? (questionDetails?.option ?? [])
+              .filter(o => isOptionCorrect(o.correct))
+              .map(o => o.options ?? '')
+              .filter(Boolean)
+              .join(', ')
+          : '';
+        explanation.submit({
+          questionId: currentQuestionId,
+          categoryId,
+          questionText,
+          selected: answerValue,
+          correct: correctAnswer,
+        });
+      }
+
       if (isMcq) {
         // MCQ doesn't open the score modal — inline option highlights on the
         // question card already convey correctness, and a lightweight toast
@@ -867,6 +907,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     attemptAudio,
     categoryId,
     currentQuestionId,
+    explanation,
     fetchHistoryAttempts,
     isCore,
     isMcq,
@@ -882,6 +923,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
     selectedMode,
     selectedOptionIds,
     showToast,
+    supportsExplanation,
     typedResponse,
   ]);
 
@@ -1124,6 +1166,7 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
               selectedOptionIds={selectedOptionIds}
               onToggleOption={handleToggleOption}
               showMcqFeedback={isMcq && !!scoreResult}
+              onWordPress={setLookupWord}
             />
 
             {isWritingCategory && (
@@ -1219,6 +1262,9 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   onToggleTranscript={() => setShowTranscript(v => !v)}
                   onToggleTranslation={() => setShowTranslation(v => !v)}
                   onToggleSample={() => setShowSampleResponse(v => !v)}
+                  explanationAvailable={supportsExplanation && !!scoreResult}
+                  showExplanation={showExplanation}
+                  onToggleExplanation={() => setShowExplanation(v => !v)}
                 />
 
                 <TranscriptPanel
@@ -1246,6 +1292,13 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
                   durationMs={samplePlayer.durationMs}
                   onTogglePlay={handleToggleSampleAudio}
                   categoryId={categoryId}
+                />
+
+                <ExplanationPanel
+                  visible={showExplanation && supportsExplanation}
+                  loading={explanation.loading}
+                  text={explanation.text}
+                  error={explanation.error}
                 />
 
                 <CardFooter
@@ -1359,6 +1412,12 @@ export const PracticeQuestionDetailScreen: React.FC = () => {
         setSelectedReason={setSelectedReason}
         additionalDetails={additionalDetails}
         setAdditionalDetails={setAdditionalDetails}
+      />
+
+      <WordDefinitionModal
+        visible={lookupWord !== null}
+        word={lookupWord ?? ''}
+        onClose={() => setLookupWord(null)}
       />
     </View>
   );

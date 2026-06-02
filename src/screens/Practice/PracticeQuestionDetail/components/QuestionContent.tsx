@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import ImageView from 'react-native-image-viewing';
 import Svg, { Path } from 'react-native-svg';
+import { TappableParagraph } from '../../../../components/atoms/TappableParagraph';
 import { isMcqCategory, isMcqMultipleCategory } from '../helpers';
 import { styles } from '../styles';
 import { scale } from '../scale';
@@ -28,6 +29,11 @@ interface Props {
   selectedOptionIds?: Set<string>;
   onToggleOption?: (optionId: string) => void;
   showMcqFeedback?: boolean;
+  // Optional tap-a-word handler. When provided, the reading
+  // passage / situation prompt becomes per-word tappable so the
+  // screen can open a dictionary modal. Passing `undefined`
+  // restores plain non-interactive text.
+  onWordPress?: (word: string) => void;
 }
 
 // Detect the legacy `image` payload that occasionally arrives as a
@@ -245,6 +251,7 @@ export const QuestionContent: React.FC<Props> = ({
   selectedOptionIds,
   onToggleOption,
   showMcqFeedback,
+  onWordPress,
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
 
@@ -295,7 +302,11 @@ export const QuestionContent: React.FC<Props> = ({
     return (
       <View style={styles.situationContainer}>
         <Text style={styles.situationHeader}>Situation Description:</Text>
-        <Text style={styles.situationText}>{questionText}</Text>
+        <TappableParagraph
+          text={questionText}
+          style={styles.situationText}
+          onWordPress={onWordPress}
+        />
       </View>
     );
   }
@@ -311,7 +322,11 @@ export const QuestionContent: React.FC<Props> = ({
     return (
       <>
         {isReadingMcq && questionText.length > 0 && (
-          <Text style={styles.paragraphText}>{questionText}</Text>
+          <TappableParagraph
+            text={questionText}
+            style={styles.paragraphText}
+            onWordPress={onWordPress}
+          />
         )}
         <View style={isReadingMcq ? styles.mcqDivider : undefined} />
         <MCQOptions
@@ -327,7 +342,13 @@ export const QuestionContent: React.FC<Props> = ({
   }
 
   if ((categoryId === 1 || categoryId === 6 || categoryId === 7) && questionText.length > 0) {
-    return <Text style={styles.paragraphText}>{questionText}</Text>;
+    return (
+      <TappableParagraph
+        text={questionText}
+        style={styles.paragraphText}
+        onWordPress={onWordPress}
+      />
+    );
   }
 
   return null;

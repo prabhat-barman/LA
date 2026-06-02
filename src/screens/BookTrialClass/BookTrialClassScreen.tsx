@@ -17,6 +17,7 @@ import { API_ENDPOINTS } from '../../config/apiConfig';
 import Data from '../../config/practiceData';
 import { useToast } from '../../context/ToastContext';
 import { useUser } from '../../context/UserContext';
+import { useBranches } from '../../hooks/useBranches';
 import apiClient from '../../services/apiClient';
 import { logger } from '../../services/logger';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
@@ -39,9 +40,10 @@ interface FormState {
   countryCode: string;
   preferredMode: PreferredMode;
   // Centre is required when `preferredMode === 'Offline'`. Stored as
-  // the human-readable label because that's what the backend expects
-  // (it doesn't have a separate centre-id catalogue) — see the old
-  // project's BookTrialScreen which submits the label verbatim.
+  // the backend branch id (string) so submit can drop it straight
+  // into the `center` form field. Matches the legacy contract — see
+  // `useCenters.js` + `BookTrialScreen.js` in la-app-merge-dev-
+  // extensive which both treat `formData.center` as the id.
   centre: string;
   // Desired score sent as the numeric overall (e.g. "47"). The chip
   // labels show "47+ (6.0 Bands)" but the backend only cares about
@@ -64,17 +66,11 @@ const DEFAULT_FORM: FormState = {
 // list propagates everywhere at once.
 const SCORE_OPTIONS = Data.selectDesiredScoreWhole;
 
-// Branch list excludes "Please Select Branch" / "Not a student with
-// LA" — for trial-class enquiries we want a real branch or "Online
-// Student". This mirrors the legacy `selectBranchFreeTrial` array.
-const BRANCH_OPTIONS = Data.selectBranchFreeTrial.filter(
-  b => b.trim().length > 0,
-);
-
 export const BookTrialClassScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { showToast } = useToast();
   const { user } = useUser();
+  const { branches, loading: branchesLoading } = useBranches();
 
   const [form, setForm] = useState<FormState>(() => ({
     ...DEFAULT_FORM,
@@ -117,6 +113,19 @@ export const BookTrialClassScreen: React.FC = () => {
     if (!form.desiredScore) out.desiredScore = 'Select your desired score.';
     return out;
   }, [form]);
+
+  // Branch options exclude the "Select Center" placeholder row — the
+  // DropdownField already shows its own placeholder. We keep the
+  // {id,label} pair around so submit can post the backend id.
+  const branchOptions = useMemo(
+    () => branches.filter(b => b.id !== ''),
+    [branches],
+  );
+  const branchLabels = useMemo(() => branchOptions.map(b => b.label), [branchOptions]);
+  const selectedBranchLabel = useMemo(
+    () => branchOptions.find(b => b.id === form.centre)?.label ?? '',
+    [branchOptions, form.centre],
+  );
 
   const canSubmit = Object.keys(errors).length === 0 && !submitting;
 
@@ -255,15 +264,18 @@ export const BookTrialClassScreen: React.FC = () => {
         {form.preferredMode === 'Offline' && (
           <DropdownField
             label="Preferred Branch"
-            value={form.centre}
-            placeholder="Select a branch"
+            value={selectedBranchLabel}
+            placeholder={
+              branchesLoading ? 'Loading branches\u2026' : 'Select a branch'
+            }
             open={branchMenuOpen}
             onToggle={() => setBranchMenuOpen(o => !o)}
-            onSelect={(v: string) => {
-              set('centre', v);
+            onSelect={(label: string) => {
+              const found = branchOptions.find(b => b.label === label);
+              if (found) set('centre', found.id);
               setBranchMenuOpen(false);
             }}
-            options={BRANCH_OPTIONS}
+            options={branchLabels}
             error={errors.centre}
           />
         )}

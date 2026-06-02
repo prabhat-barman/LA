@@ -434,11 +434,13 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
             <TouchableOpacity
               style={[
                 styles.toggleButton,
+                styles.toggleButtonShort,
                 activeToggle === 'Mock Test' && styles.toggleButtonActive,
               ]}
               onPress={() => setActiveToggle('Mock Test')}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.toggleButtonText,
                   activeToggle === 'Mock Test' && styles.toggleButtonTextActive,
@@ -450,11 +452,13 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
             <TouchableOpacity
               style={[
                 styles.toggleButton,
+                styles.toggleButtonLong,
                 activeToggle === 'Extensive Mock Test' && styles.toggleButtonActive,
               ]}
               onPress={() => setActiveToggle('Extensive Mock Test')}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.toggleButtonText,
                   activeToggle === 'Extensive Mock Test' && styles.toggleButtonTextActive,
@@ -1313,10 +1317,21 @@ const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque-Bold',
   },
   toggleButton: {
-    flex: 1,
     paddingVertical: scale(10),
+    paddingHorizontal: scale(14),
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: scale(18),
+  },
+  // Weighted widths so both labels render at the same font size
+  // without the longer "Extensive Mock Test" string getting cramped
+  // or shrunk. Ratio is roughly the visual width of the two strings
+  // at fontSize 13 with semibold weight.
+  toggleButtonShort: {
+    flex: 1,
+  },
+  toggleButtonLong: {
+    flex: 1.7,
   },
   toggleButtonActive: {
     backgroundColor: '#1C1F2A',
@@ -1326,6 +1341,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontWeight: 'bold',
     fontFamily: 'BricolageGrotesque-SemiBold',
+    textAlign: 'center',
   },
   toggleButtonTextActive: {
     color: colors.white,

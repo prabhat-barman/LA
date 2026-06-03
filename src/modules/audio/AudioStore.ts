@@ -176,7 +176,7 @@ class AudioStore {
       });
 
     } catch (error) {
-      logger.warn("AudioStore play failed:", error);
+      logger.warn("AudioStore play failed:", { id, url, error });
       this.onError(id, error);
     } finally {
       this.isLocked = false;

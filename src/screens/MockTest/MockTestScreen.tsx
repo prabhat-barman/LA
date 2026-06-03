@@ -308,6 +308,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
         mockId: past.mockId,
         variant: past.variant,
         category: past.category,
+        resultId: past.resultId,
         title: past.title,
       });
     },

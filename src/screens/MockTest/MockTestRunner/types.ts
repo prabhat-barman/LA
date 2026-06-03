@@ -176,6 +176,12 @@ export interface SubmitContext {
   // in `answer[]`, `ans[]`, `q_ans[]`, `correct[]` (legacy, but
   // required). Null for question kinds where no canonical answer exists.
   correctAnswer: string | null;
+  // The raw `answer` field straight off the question payload. Distinct
+  // from `correctAnswer` (which is the cleaned ground-truth string the
+  // backend wants in `correct[]`) — `rawAnswer` is what legacy ships
+  // into `ans[]` / `q_ans[]` / `answer[]` for question kinds where the
+  // original markup matters (highlight subcategory 19, default fallback).
+  rawAnswer: string | null;
   // HTML representation of the user's selection — only meaningful for
   // word-highlight (subcategory 19). Null otherwise.
   htmlAnswer: string | null;
@@ -185,6 +191,10 @@ export interface SubmitContext {
   isComplete: boolean;
   // Device platform string the backend wants in `isPlatform`.
   platform: 'android' | 'ios';
+  // Contextual metadata for mock test flow mapping
+  variant: MockTestVariant;
+  category: MockSection | 'Full Mock';
+  currentSectionIndex: number;
 }
 
 export type QueueStatus = 'pending' | 'in-flight' | 'succeeded' | 'failed';

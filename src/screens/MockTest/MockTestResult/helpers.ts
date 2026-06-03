@@ -1,7 +1,9 @@
+import { resolveImageUrl } from '../../../utils/mediaUrls';
 import type { MockSection, MockTestVariant } from '../MockTestRunner/types';
 import type {
   EnablingSkillScore,
   MockResult,
+  MockResultUserInfo,
   PastMock,
   PteScore,
   SectionScore,
@@ -21,6 +23,7 @@ const PTE_MAX = 90;
 const OVERALL_FIELDS = [
   'overall_score',
   'overall',
+  'total', // ← backend ships `data.total` for the headline number
   'score_percent',
   'percentage',
   'total_score',
@@ -40,6 +43,12 @@ const SECTION_FIELDS: Record<MockSection, string[]> = {
   Writing: [
     'writing_score',
     'writing',
+    // Note: backend ships a typo `writting` in the `com` block —
+    // legacy ScoreCardScreen.js line 220 maps `data.com.writting` →
+    // "writing". Accept it here so the section card renders the
+    // real score instead of an empty placeholder.
+    'writting',
+    'writting_score',
     'communicative_writing',
     'wr_score',
     'writingScore',
@@ -91,7 +100,9 @@ const ENABLING_SKILL_FIELDS: Array<{
   },
   {
     name: 'Vocabulary',
-    fields: ['vocabulary', 'vocabulary_score', 'enabling_vocabulary'],
+    // Backend's `data.enable.vocab` (shortened) is the live field —
+    // legacy spelling-out aliases kept for older fixtures.
+    fields: ['vocab', 'vocabulary', 'vocabulary_score', 'enabling_vocabulary'],
   },
   {
     name: 'Written Discourse',
@@ -282,6 +293,58 @@ interface NormalizerContext {
   fallbackTitle?: string;
 }
 
+// Composes the default headline label used when backend didn't ship
+// one in `data.text`. Mirrors the title default rule so the two
+// labels read consistently.
+const composeScoreLabel = (
+  category: MockSection | 'Full Mock',
+): string =>
+  category === 'Full Mock' ? 'Mock Test Score' : `${category} Score`;
+
+// Reads the `user_data` block (top-level on the raw payload, peer
+// of `data`). Resolves the avatar path through resolveImageUrl so
+// the UI can render `<Image source={{ uri }}>` directly. All fields
+// default to null when missing.
+const extractUserInfo = (rawPayload: unknown): MockResultUserInfo => {
+  const empty: MockResultUserInfo = {
+    firstName: null,
+    lastName: null,
+    imageUrl: null,
+    email: null,
+    dob: null,
+    countryResidence: null,
+    countryCitizenship: null,
+  };
+  if (!isObject(rawPayload)) return empty;
+  const userData = rawPayload.user_data;
+  if (!isObject(userData)) return empty;
+
+  const stringOrNull = (v: unknown): string | null => {
+    if (typeof v !== 'string') return null;
+    const trimmed = v.trim();
+    if (trimmed.length === 0) return null;
+    // Backend sometimes ships the literal string "null" — treat it
+    // as missing, not as a value (mirrors legacy formatUserName).
+    if (trimmed.toLowerCase() === 'null') return null;
+    return trimmed;
+  };
+
+  const rawImage = stringOrNull(userData.image);
+  // resolveImageUrl handles the `/storage/...` profile path shape
+  // the backend ships — see mediaUrls.ts for the rules.
+  const imageUrl = rawImage ? resolveImageUrl(rawImage) : null;
+
+  return {
+    firstName: stringOrNull(userData.first_name),
+    lastName: stringOrNull(userData.last_name),
+    imageUrl: imageUrl || null,
+    email: stringOrNull(userData.email),
+    dob: stringOrNull(userData.dob),
+    countryResidence: stringOrNull(userData.country_residence),
+    countryCitizenship: stringOrNull(userData.country_citizenship),
+  };
+};
+
 // Top-level entry point. Never throws — returns a MockResult with
 // `overall: null` and empty sections/skills arrays for completely
 // unrecognizable payloads so the screen can render its "Pending
@@ -295,6 +358,7 @@ export const normalizeMockResult = (
     ctx.category === 'Full Mock'
       ? `${ctx.variant === 'full' ? 'Full' : 'Extensive'} Mock #${ctx.mockId}`
       : `${ctx.category} Mock #${ctx.mockId}`;
+  const userInfo = extractUserInfo(payload);
 
   if (!inner) {
     // Couldn't even find a working object — return the empty shell
@@ -304,12 +368,14 @@ export const normalizeMockResult = (
       variant: ctx.variant,
       category: ctx.category,
       title: ctx.fallbackTitle ?? composedDefaultTitle,
+      scoreLabel: composeScoreLabel(ctx.category),
       overall: null,
       sections: buildSections(ctx.category, {}),
       enablingSkills: [],
       totalQuestions: null,
       attemptedQuestions: null,
       submittedAtIso: null,
+      userInfo,
       raw: payload,
     };
   }
@@ -322,6 +388,13 @@ export const normalizeMockResult = (
     ctx.fallbackTitle ??
     firstStringFromFields(inner, TITLE_FIELDS) ??
     composedDefaultTitle;
+  // Backend's `data.text` is the headline label that sits under the
+  // overall number (e.g. "Speaking Score"). Fall back to a composed
+  // default keyed on category so the layout stays consistent when
+  // the backend omits it.
+  const scoreLabel =
+    firstStringFromFields(inner, ['text', 'score_label', 'label']) ??
+    composeScoreLabel(ctx.category);
 
   const submittedAtIso = (() => {
     for (const f of TIMESTAMP_FIELDS) {
@@ -339,6 +412,7 @@ export const normalizeMockResult = (
     variant: ctx.variant,
     category: ctx.category,
     title,
+    scoreLabel,
     overall,
     sections,
     enablingSkills,
@@ -348,6 +422,7 @@ export const normalizeMockResult = (
     totalQuestions: totalRaw != null ? Math.round(totalRaw) : null,
     attemptedQuestions: attemptedRaw != null ? Math.round(attemptedRaw) : null,
     submittedAtIso,
+    userInfo,
     raw: payload,
   };
 };
@@ -356,6 +431,11 @@ export const normalizeMockResult = (
 // Reading, Listening) and one entry for sectional. Missing scores
 // are surfaced as `score: null` rather than dropped so the UI can
 // render a placeholder card per section.
+//
+// Backend nests per-section scores under `data.com` (legacy
+// ScoreCardScreen.js:213). We probe `src.com` FIRST so the real
+// numbers win; the flat fallback covers older test fixtures and
+// hypothetical future backends that hoist the scores up a level.
 const buildSections = (
   category: MockSection | 'Full Mock',
   src: Record<string, unknown>,
@@ -364,8 +444,15 @@ const buildSections = (
     category === 'Full Mock'
       ? ['Speaking', 'Writing', 'Reading', 'Listening']
       : [category];
+  const comBlock = isObject(src.com) ? src.com : null;
   return sectionsToRender.map(section => {
-    const raw = coerceScore(firstFromFields(src, SECTION_FIELDS[section]));
+    const fromCom = comBlock
+      ? coerceScore(firstFromFields(comBlock, SECTION_FIELDS[section]))
+      : null;
+    const raw =
+      fromCom != null
+        ? fromCom
+        : coerceScore(firstFromFields(src, SECTION_FIELDS[section]));
     return {
       section,
       score: toPteBand(raw),
@@ -377,12 +464,22 @@ const buildSections = (
 // Only includes enabling skills the backend actually surfaced (skips
 // entries that resolve to null) — keeps the UI rail tidy instead of
 // padding it with six "N/A" cards when the backend only returns two.
+//
+// Same nesting trick as `buildSections` — backend ships enabling
+// skills under `data.enable`. Flat fallback supports test fixtures.
 const buildEnablingSkills = (
   src: Record<string, unknown>,
 ): EnablingSkillScore[] => {
+  const enableBlock = isObject(src.enable) ? src.enable : null;
   const out: EnablingSkillScore[] = [];
   for (const skill of ENABLING_SKILL_FIELDS) {
-    const raw = coerceScore(firstFromFields(src, skill.fields));
+    const fromEnable = enableBlock
+      ? coerceScore(firstFromFields(enableBlock, skill.fields))
+      : null;
+    const raw =
+      fromEnable != null
+        ? fromEnable
+        : coerceScore(firstFromFields(src, skill.fields));
     if (raw != null) {
       out.push({ name: skill.name, score: toPteBand(raw) });
     }
@@ -435,63 +532,121 @@ export const normalizePastMock = (
 ): PastMock | null => {
   if (!isPlainObject(rawEntry)) return null;
 
-  // Mock id is the single required field — without it the rail card
-  // has nowhere to navigate. Accept any non-empty string or finite
-  // number, mirroring `normalizePendingMock`'s contract so the rail
-  // composer (`${variant}-${mockId}`) produces stable keys for both.
+  const nestedMock =
+    rawEntry.mock && typeof rawEntry.mock === 'object' && !Array.isArray(rawEntry.mock)
+      ? (rawEntry.mock as Record<string, unknown>)
+      : null;
+
+  // Coerces a candidate field value into the canonical id format
+  // (finite number OR non-empty trimmed string). Returns null for
+  // anything else. Hoisted so both `mockId` and `resultId` extraction
+  // share the exact same shape rules.
+  const coerceId = (v: unknown): number | string | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+    return null;
+  };
+
+  // Mock id is the question-set identifier. Prefer the nested
+  // `mock.id` shape (legacy backend ships it this way), then fall
+  // back to flat fields. Mirrors `normalizePendingMock`'s contract
+  // so the rail composer (`${variant}-${mockId}`) produces stable
+  // keys for both rails.
   let mockId: number | string | null = null;
-  for (const f of PAST_MOCK_ID_FIELDS) {
-    const v = rawEntry[f];
-    if (typeof v === 'number' && Number.isFinite(v)) {
-      mockId = v;
-      break;
+  const sources = nestedMock ? [nestedMock, rawEntry] : [rawEntry];
+  for (const src of sources) {
+    for (const f of PAST_MOCK_ID_FIELDS) {
+      const found = coerceId(src[f]);
+      if (found != null) {
+        mockId = found;
+        break;
+      }
     }
-    if (typeof v === 'string' && v.trim().length > 0) {
-      mockId = v.trim();
+    if (mockId != null) break;
+  }
+  if (mockId == null) return null;
+
+  // Result-row id is what MOCK_SCORE / MOCK_ANALYSIS expect in the
+  // URL. It's the OUTER row's own primary key (NOT the nested
+  // `mock.id`) — calling `mock/score/{mock.id}` returns null and the
+  // PHP backend throws an NPE on `user_id` access. Mirrors legacy
+  // `MockTestResultScreen.js:228` which passes `item?.id` (outer)
+  // to ScoreCardScreen.
+  //
+  // We deliberately read ONLY from the outer entry (not the nested
+  // `mock` object) for `id`/`result_id`/`user_mock_id` so we never
+  // confuse the row id with the mock master id. Falls back to
+  // `mockId` for legacy/dummy data that doesn't expose a row id.
+  let resultId: number | string | null = null;
+  for (const f of ['result_id', 'resultId', 'user_mock_id', 'attempt_id', 'id']) {
+    const found = coerceId(rawEntry[f]);
+    if (found != null) {
+      resultId = found;
       break;
     }
   }
-  if (mockId == null) return null;
+  // Last-resort fallback: if the payload truly has no separate row
+  // id, use mockId. This keeps tests + legacy fixtures working
+  // while preferring the correct id when both are present.
+  if (resultId == null) resultId = mockId;
 
   // Category — number code OR string label. Default 'Full Mock' to
   // match the way most past mocks ship out of PTE backends; the rail
   // card surfaces this so a wrong default is visible at a glance.
   let category: MockSection | 'Full Mock' = 'Full Mock';
-  for (const f of PAST_CATEGORY_FIELDS) {
-    const v = rawEntry[f];
-    if (v == null) continue;
-    const asNum = Number(v);
-    if (Number.isFinite(asNum) && PAST_CATEGORY_CODE_TO_LABEL[asNum]) {
-      category = PAST_CATEGORY_CODE_TO_LABEL[asNum];
-      break;
-    }
-    if (typeof v === 'string') {
-      const trimmed = v.trim();
-      if (
-        trimmed === 'Speaking' ||
-        trimmed === 'Writing' ||
-        trimmed === 'Reading' ||
-        trimmed === 'Listening' ||
-        trimmed === 'Full Mock'
-      ) {
-        category = trimmed;
+  let categoryFound = false;
+  for (const src of sources) {
+    for (const f of PAST_CATEGORY_FIELDS) {
+      const rawCategory = src[f];
+      if (rawCategory == null) continue;
+
+      const categoryVal =
+        rawCategory && typeof rawCategory === 'object' && !Array.isArray(rawCategory)
+          ? (rawCategory as Record<string, unknown>).id ?? (rawCategory as Record<string, unknown>).category_id ?? rawCategory
+          : rawCategory;
+
+      const asNum = Number(categoryVal);
+      if (Number.isFinite(asNum) && PAST_CATEGORY_CODE_TO_LABEL[asNum]) {
+        category = PAST_CATEGORY_CODE_TO_LABEL[asNum];
+        categoryFound = true;
         break;
       }
+      if (typeof categoryVal === 'string') {
+        const trimmed = categoryVal.trim();
+        if (
+          trimmed === 'Speaking' ||
+          trimmed === 'Writing' ||
+          trimmed === 'Reading' ||
+          trimmed === 'Listening' ||
+          trimmed === 'Full Mock'
+        ) {
+          category = trimmed;
+          categoryFound = true;
+          break;
+        }
+      }
     }
+    if (categoryFound) break;
   }
 
   // Overall score — reuses the per-test normalizer's helpers. PTE
   // banding (10-90) applies so the rail card never paints an out-of-
   // range value; `null` = pending grading, surfaced as "Pending" in
   // the UI rather than an awkward 0.
-  const overallRaw = coerceScore(firstFromFields(rawEntry, OVERALL_FIELDS));
+  const overallVal =
+    firstFromFields(rawEntry, OVERALL_FIELDS) ??
+    (nestedMock ? firstFromFields(nestedMock, OVERALL_FIELDS) : null);
+  const overallRaw = coerceScore(overallVal);
   const overall = toPteBand(overallRaw);
 
   // Title — backend-provided or composed default. Same composition
   // rule the per-test normalizer uses so the rail card and the
   // detail screen header read consistently for the same mock.
-  const title =
+  const titleVal =
     firstStringFromFields(rawEntry, PAST_TITLE_FIELDS) ??
+    (nestedMock ? firstStringFromFields(nestedMock, PAST_TITLE_FIELDS) : null);
+  const title =
+    titleVal ??
     (category === 'Full Mock'
       ? `${ctx.variant === 'full' ? 'Full' : 'Extensive'} Mock #${mockId}`
       : `${category} Mock #${mockId}`);
@@ -499,12 +654,15 @@ export const normalizePastMock = (
   // Submitted-at timestamp — reuses the per-test normalizer's
   // catalog of common timestamp field names.
   let submittedAtIso: string | null = null;
-  for (const f of TIMESTAMP_FIELDS) {
-    const iso = coerceTimestampIso(rawEntry[f]);
-    if (iso) {
-      submittedAtIso = iso;
-      break;
+  for (const src of sources) {
+    for (const f of TIMESTAMP_FIELDS) {
+      const iso = coerceTimestampIso(src[f]);
+      if (iso) {
+        submittedAtIso = iso;
+        break;
+      }
     }
+    if (submittedAtIso) break;
   }
 
   // Phase 6.1 — Opportunistic section-score extraction. The list
@@ -522,7 +680,10 @@ export const normalizePastMock = (
   const SECTIONS: MockSection[] = ['Speaking', 'Writing', 'Reading', 'Listening'];
   if (category === 'Full Mock') {
     for (const section of SECTIONS) {
-      const raw = coerceScore(firstFromFields(rawEntry, SECTION_FIELDS[section]));
+      const val =
+        firstFromFields(rawEntry, SECTION_FIELDS[section]) ??
+        (nestedMock ? firstFromFields(nestedMock, SECTION_FIELDS[section]) : null);
+      const raw = coerceScore(val);
       const banded = toPteBand(raw);
       if (banded != null) sectionScores[section] = banded;
     }
@@ -534,6 +695,7 @@ export const normalizePastMock = (
   }
 
   return {
+    resultId,
     mockId,
     variant: ctx.variant,
     category,

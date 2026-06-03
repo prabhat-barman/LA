@@ -613,6 +613,11 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: scale(48),
+    // Always claim remaining row width — whether the primary CTA is
+    // alone (Submit Test on last question) or sitting next to the
+    // compact Save & Exit secondary button. Without this the row's
+    // `alignItems: 'center'` makes the button shrink to text width.
+    flex: 1,
   },
   footerPrimaryBtnDisabled: {
     backgroundColor: '#9CA3AF',
@@ -631,11 +636,6 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: scale(10),
-  },
-  footerPrimaryBtnExpand: {
-    // Applied to the primary CTA when it sits in the side-by-side
-    // row — claims remaining width so secondary stays compact.
-    flex: 1,
   },
   footerSecondaryBtn: {
     paddingVertical: scale(12),

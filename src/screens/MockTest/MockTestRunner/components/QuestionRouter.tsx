@@ -22,6 +22,10 @@ interface Props {
   // recording window. Practice / standalone uses leave it false so
   // the user can self-pace.
   hideStopButton?: boolean;
+  // Forwarded straight through to SpeakingQuestion — see that
+  // component for the full contract. Only relevant on the speaking
+  // branch; every other branch ignores it.
+  onPromptAudioPlayingChange?: (isPlaying: boolean) => void;
 }
 
 // Single switch on `question.kind`. Every `AnswerKind` has a
@@ -38,7 +42,16 @@ interface Props {
 // branches are pure / stateless from the runner's perspective so they
 // don't need an imperative handle.
 export const QuestionRouter = forwardRef<SpeakingQuestionRef, Props>(
-  ({ question, draft, onAnswerChange, hideStopButton }, ref) => {
+  (
+    {
+      question,
+      draft,
+      onAnswerChange,
+      hideStopButton,
+      onPromptAudioPlayingChange,
+    },
+    ref,
+  ) => {
     switch (question.kind) {
       case 'speaking':
         return (
@@ -48,6 +61,7 @@ export const QuestionRouter = forwardRef<SpeakingQuestionRef, Props>(
             question={question}
             onAnswerChange={onAnswerChange}
             hideStopButton={hideStopButton}
+            onPromptAudioPlayingChange={onPromptAudioPlayingChange}
           />
         );
       case 'mcq-single':

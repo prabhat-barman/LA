@@ -32,6 +32,22 @@ export interface EnablingSkillScore {
   score: PteScore;
 }
 
+// Candidate profile fields surfaced on the ScoreCard. Mirrors the
+// shape legacy `ScoreCardScreen.js` reads from `scoreData.user_data`
+// (line 105-184). All fields nullable — the backend omits them on
+// older mocks and the UI renders dashes for missing values.
+export interface MockResultUserInfo {
+  firstName: string | null;
+  lastName: string | null;
+  // Resolved absolute URL (resolveImageUrl already applied). Null
+  // when the backend didn't ship one or the path was invalid.
+  imageUrl: string | null;
+  email: string | null;
+  dob: string | null;
+  countryResidence: string | null;
+  countryCitizenship: string | null;
+}
+
 // Final shape consumed by the screen. `overall` may be null when the
 // backend hasn't computed the score yet (e.g. async grading still in
 // flight); the UI then renders the "Pending" empty state.
@@ -42,6 +58,11 @@ export interface MockResult {
   // Display-friendly title. Best-effort: pulled from `title`, `name`,
   // or composed from variant + category if the backend omits it.
   title: string;
+  // Headline label backend ships alongside the score (e.g.
+  // "Speaking Score", "Mock Test Score"). Falls back to a composed
+  // default when missing. Legacy ScoreCardScreen.js reads this as
+  // `scoreData.data.text` and shows it under the overall number.
+  scoreLabel: string;
   // 10-90 PTE band. Null when grading hasn't completed.
   overall: PteScore;
   // Always 4 entries (Full Mock) or 1 (sectional). Sections not
@@ -60,6 +81,9 @@ export interface MockResult {
   // from common backend field names; `null` when nothing parseable
   // is present.
   submittedAtIso: string | null;
+  // Candidate profile shown on the ScoreCard. All-null when the
+  // backend response had no `user_data` block.
+  userInfo: MockResultUserInfo;
   // The original API payload. Surfaced via the long-press debug
   // sheet so we can iterate the normalizer when the real shape
   // differs from our defensive guesses.
@@ -76,6 +100,18 @@ export interface MockResult {
 // waste bandwidth + render time. The full payload is fetched lazily
 // when the user taps in.
 export interface PastMock {
+  // Outer-row "result id" the per-test detail endpoints
+  // (`mock/score/{id}`, `mock/resultDetail/{id}`) expect in the URL.
+  // This is **NOT** the same as `mockId` — the legacy backend keys
+  // the score payload on the user-mock-attempt row, while `mockId`
+  // identifies the question set. Passing `mockId` to MOCK_SCORE
+  // returns null and the PHP controller throws an NPE on it (see
+  // `MockTrait.php:93` — `Attempt to read property "user_id" on null`).
+  //
+  // Mirrors legacy `MockTestResultScreen.js` line 228 where
+  // `navigation.navigate("ScoreCardScreen", { questionId: item?.id })`
+  // explicitly threads the outer `id` (not `item.mock.id`).
+  resultId: number | string;
   mockId: number | string;
   variant: MockTestVariant;
   category: MockSection | 'Full Mock';
@@ -110,11 +146,19 @@ export interface PastMock {
 
 // Route params for the result screen. Mirrors the runner's params
 // minus the prereq-specific bits. `mockId` + `variant` + `category`
-// are all we need to fetch and label the result.
+// are all we need to label the result; `resultId` is what we hit
+// the per-test detail endpoints with (see `PastMock.resultId`
+// for the why).
+//
+// `resultId` is optional because the post-finalize flow from
+// MockTestRunner doesn't know it yet (backend assigns it during
+// grading). When omitted, useMockResult resolves it via the past
+// mocks list — see that hook for the lookup logic.
 export interface MockTestResultRouteParams {
   mockId: number | string;
   variant: MockTestVariant;
   category: MockSection | 'Full Mock';
+  resultId?: number | string;
   // Optional — when present, shown as the screen's headline instead
   // of the composed default. Lets the runner pass through whatever
   // title the prereq screen had so the user sees a consistent label

@@ -27,6 +27,7 @@ import {
   buildRemainingQuesPayload,
   findSectionIndexForQuestion,
   formatRemainingTime,
+  getGroundTruth,
   getSection,
   isAnswerComplete,
   OPTIONAL_LISTENING_BREAK_SEC,
@@ -151,6 +152,13 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
   // recorder would be torn down on unmount without the file path
   // ever surfacing into the SUBMIT_MOCK payload.
   const speakingRef = useRef<SpeakingQuestionRef>(null);
+  // True while the active speaking question's prompt audio is still
+  // playing (or in its pre-roll countdown). Used to disable the Next
+  // button so users can't skip past the prompt before hearing it —
+  // mirrors the legacy app's behaviour. Reset to false by the child
+  // component on every question swap (and stays false for any
+  // question that doesn't have prompt audio).
+  const [isPromptAudioPlaying, setIsPromptAudioPlaying] = useState(false);
 
   // Sync currentIndex from session.startIndex on first load (resume).
   // Also pre-seed `currentSectionIndex` from the startIndex so the
@@ -231,19 +239,25 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
         submittedAt: Date.now(),
       };
 
-      // Backend wants `audio_script` / `correct_answer` / `question`
-      // echoed back from the raw question payload — pull them
-      // straight off `q.raw` since they're not part of the normalized
-      // surface yet.
-      const raw = (q.raw ?? {}) as {
-        audio_script?: unknown;
-        correct_answer?: unknown;
-        question?: unknown;
-      };
+      // Backend wants `audio_script` / `answer` / `question` echoed
+      // back from the raw question payload — pull them straight off
+      // `q.raw` since they're not part of the normalized surface yet.
+      const raw = (q.raw ?? {}) as Record<string, unknown>;
       const audioScript =
         typeof raw.audio_script === 'string' ? raw.audio_script : null;
-      const correctAnswer =
-        typeof raw.correct_answer === 'string' ? raw.correct_answer : null;
+      // `rawAnswer` is the question's raw `answer` field — used by
+      // the SUBMIT_MOCK payload's per-subcategory mapping for kinds
+      // where the original markup (or option-id string) matters
+      // (highlight 19, repeat sentence / retell lecture default).
+      const rawAnswer = typeof raw.answer === 'string' ? raw.answer : null;
+      // `correctAnswer` is the cleaned ground-truth string the
+      // backend wants in `correct[]` (and the sibling fields for
+      // most subcategories). `getGroundTruth` mirrors the legacy
+      // extraction logic — cAns-span scrape, MCQ correct-option
+      // join, reorder sort-by-index, etc. — collapsed into a single
+      // unit-tested helper so the runner stays a thin orchestrator.
+      const ground = getGroundTruth(raw);
+      const correctAnswer = ground.length > 0 ? ground : null;
       // `text[]` source priority: raw.question (matches legacy app
       // exactly), then the normalized prompt, then the title. Falling
       // back to title rather than null/empty for non-prompt questions
@@ -264,6 +278,7 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
         audioScript,
         questionText,
         correctAnswer,
+        rawAnswer,
         // Highlight (subcategory 19) is the only kind that produces
         // an HTML answer. Phase 1.1.b doesn't render it yet, so
         // always null here — wire it up alongside the highlight
@@ -272,9 +287,12 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
         isPending,
         isComplete,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        variant,
+        category,
+        currentSectionIndex,
       };
     },
-    [mockId, session],
+    [mockId, session, variant, category, currentSectionIndex],
   );
 
   // Navigates the user to the result screen after a successful
@@ -574,50 +592,59 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
 
   // Performs the actual advance — extracted so the confirm-dialog
   // branch below can call it after the recording flush resolves.
-  const advanceToNext = useCallback(() => {
-    if (!session || !currentQuestion) return;
+  // Accepts an optional `overrideDraft` so callers can inject a
+  // freshly-captured draft (typically the speaking recording that
+  // just landed via `finishRecording`) without waiting on the
+  // setState round-trip — `currentDraft` would still hold the stale
+  // empty value at this point in the same tick.
+  const advanceToNext = useCallback(
+    (overrideDraft?: AnswerDraft) => {
+      if (!session || !currentQuestion) return;
 
-    const ctx = buildSubmitContext({
-      index: currentIndex,
-      draft: currentDraft,
-      isPending: false,
-      isComplete: false,
-    });
-    if (ctx) {
-      submitQueue.enqueue({
-        id: buildQueueItemId(mockId, ctx.answer.questionId),
-        context: ctx,
+      const draftToSubmit = overrideDraft ?? currentDraft;
+      const ctx = buildSubmitContext({
+        index: currentIndex,
+        draft: draftToSubmit,
+        isPending: false,
+        isComplete: false,
       });
-    }
+      if (ctx) {
+        submitQueue.enqueue({
+          id: buildQueueItemId(mockId, ctx.answer.questionId),
+          context: ctx,
+        });
+      }
 
-    // Are we at the boundary of a section AND there's a next section?
-    // If so, pause on the break overlay instead of silently rolling
-    // into the next section's first question. The break gives the
-    // user mental space to switch task types (Speaking → Writing is
-    // a meaningful gear-shift) and clearly signals that the prior
-    // section is locked.
-    const sectionRange = session.sectionRanges[currentSectionIndex];
-    if (
-      sectionRange &&
-      currentIndex === sectionRange.endIndex &&
-      currentSectionIndex < session.sectionRanges.length - 1
-    ) {
-      setIsOnSectionBreak(true);
-      return;
-    }
+      // Are we at the boundary of a section AND there's a next
+      // section? If so, pause on the break overlay instead of
+      // silently rolling into the next section's first question. The
+      // break gives the user mental space to switch task types
+      // (Speaking → Writing is a meaningful gear-shift) and clearly
+      // signals that the prior section is locked.
+      const sectionRange = session.sectionRanges[currentSectionIndex];
+      if (
+        sectionRange &&
+        currentIndex === sectionRange.endIndex &&
+        currentSectionIndex < session.sectionRanges.length - 1
+      ) {
+        setIsOnSectionBreak(true);
+        return;
+      }
 
-    setCurrentIndex(idx => Math.min(idx + 1, session.questions.length - 1));
-    questionStartedAtRef.current = Date.now();
-  }, [
-    buildSubmitContext,
-    currentDraft,
-    currentIndex,
-    currentQuestion,
-    currentSectionIndex,
-    mockId,
-    session,
-    submitQueue,
-  ]);
+      setCurrentIndex(idx => Math.min(idx + 1, session.questions.length - 1));
+      questionStartedAtRef.current = Date.now();
+    },
+    [
+      buildSubmitContext,
+      currentDraft,
+      currentIndex,
+      currentQuestion,
+      currentSectionIndex,
+      mockId,
+      session,
+      submitQueue,
+    ],
+  );
 
   // Confirmation gate before every Next press in mock tests. Mocks
   // are one-shot — once you advance you cannot return — so we mirror
@@ -637,15 +664,32 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
           text: 'Yes, Next',
           onPress: () => {
             void (async () => {
+              // `finishRecording` resolves with the captured file
+              // path + duration when a recording was actually in
+              // flight, or `null` when the recorder was still in the
+              // pre-roll countdown (no audio captured). We funnel
+              // either a freshly-built speaking draft or the empty
+              // draft straight into `advanceToNext` — bypassing the
+              // React state round-trip that would otherwise leave
+              // `currentDraft` stale on this same tick and ship a
+              // blank `file[]` on the next mock submission.
+              let recordedDraft: AnswerDraft | undefined;
               try {
-                await speakingRef.current?.finishRecording();
+                const result = await speakingRef.current?.finishRecording();
+                if (result) {
+                  recordedDraft = {
+                    kind: 'speaking',
+                    audioFilePath: result.filePath,
+                    durationSec: result.duration,
+                  };
+                }
               } catch (err) {
                 logger.warn(
                   '[MockTestRunner] finishRecording on Next failed',
                   err instanceof Error ? err.message : String(err),
                 );
               }
-              advanceToNext();
+              advanceToNext(recordedDraft);
             })();
           },
         },
@@ -789,17 +833,32 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
           style: 'destructive',
           onPress: () => {
             void (async () => {
+              // Same inline-draft pattern as `handleNext` — see the
+              // comment there. Without this, the final question's
+              // recording would race against `setAnswers` and the
+              // SUBMIT_MOCK call for the LAST question (the most
+              // important one of the attempt) would ship an empty
+              // `file[]`.
+              let recordedDraft: AnswerDraft | undefined;
               try {
-                await speakingRef.current?.finishRecording();
+                const result = await speakingRef.current?.finishRecording();
+                if (result) {
+                  recordedDraft = {
+                    kind: 'speaking',
+                    audioFilePath: result.filePath,
+                    durationSec: result.duration,
+                  };
+                }
               } catch (err) {
                 logger.warn(
                   '[MockTestRunner] finishRecording on Submit failed',
                   err instanceof Error ? err.message : String(err),
                 );
               }
+              const draftToSubmit = recordedDraft ?? currentDraft;
               const ctx = buildSubmitContext({
                 index: currentIndex,
-                draft: currentDraft,
+                draft: draftToSubmit,
                 isPending: false,
                 isComplete: true,
               });
@@ -844,16 +903,18 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
     !!session.sectionRanges[currentSectionIndex] &&
     currentIndex === session.sectionRanges[currentSectionIndex].endIndex &&
     currentSectionIndex < session.sectionRanges.length - 1;
-  // Speaking is intentionally always submittable in mock mode —
-  // mirrors the legacy app where the user decides when to end the
-  // recording window. The confirm dialog on Next provides the
-  // "did you mean to?" guardrail; gating on draft completeness would
-  // trap users mid-recording with no way to advance. Non-speaking
-  // kinds still gate on `isAnswerComplete` so an accidental tap on
-  // an empty MCQ / blank input is caught.
+  // Speaking is intentionally always submittable in mock mode ONCE
+  // the prompt audio has finished — mirrors the legacy app where the
+  // user decides when to end the recording window. While the prompt
+  // is still playing (or counting down), Next is disabled so the user
+  // can't skip past the prompt before hearing it. The confirm dialog
+  // on Next provides the "did you mean to?" guardrail; gating on draft
+  // completeness would trap users mid-recording with no way to
+  // advance. Non-speaking kinds still gate on `isAnswerComplete` so
+  // an accidental tap on an empty MCQ / blank input is caught.
   const canSubmit =
     currentQuestion?.kind === 'speaking'
-      ? true
+      ? !isPromptAudioPlaying
       : isAnswerComplete(currentDraft);
 
   // ── Render branches ──────────────────────────────────────────────
@@ -992,6 +1053,7 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
               draft={currentDraft}
               onAnswerChange={handleAnswerChange}
               hideStopButton
+              onPromptAudioPlayingChange={setIsPromptAudioPlaying}
             />
           </View>
         ) : (

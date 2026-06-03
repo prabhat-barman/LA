@@ -114,6 +114,7 @@ export const MockTestHistoryScreen: React.FC = () => {
         mockId: mock.mockId,
         variant: mock.variant,
         category: mock.category,
+        resultId: mock.resultId,
         title: mock.title,
       });
     },

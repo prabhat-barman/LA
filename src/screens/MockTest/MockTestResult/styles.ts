@@ -170,6 +170,303 @@ export const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque-Regular',
   },
 
+  // ── CommunicationScoreCard (top hero card) ────────────────────────
+  // Mirrors legacy CommunicationScoreCard.js — avatar + name +
+  // subtitle on the left, purple scorcard.png ImageBackground pill
+  // on the right with the numeric score + label baked over it.
+  // The pill bleeds past the card's right edge by ~20px (negative
+  // marginRight on the pill) — that overhang is part of the legacy
+  // visual language. We replicate it here with the same trick.
+  commCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: scale(16),
+    marginTop: scale(16),
+    padding: scale(14),
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderTopLeftRadius: scale(12),
+    borderBottomLeftRadius: scale(12),
+    borderBottomRightRadius: scale(12),
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+    overflow: 'visible',
+  },
+  commLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  commAvatar: {
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
+    backgroundColor: '#E5E7EB',
+  },
+  commAvatarFallback: {
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
+    backgroundColor: '#1A2151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commAvatarFallbackText: {
+    color: '#FFFFFF',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    fontSize: scale(20),
+  },
+  commTextBlock: {
+    marginLeft: scale(12),
+    flex: 1,
+  },
+  commName: {
+    fontSize: scale(16),
+    color: '#0D112B',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+  commSubtitle: {
+    marginTop: scale(2),
+    fontSize: scale(12),
+    color: '#6B7280',
+    fontFamily: 'BricolageGrotesque-Regular',
+  },
+  commScorePill: {
+    width: scale(120),
+    height: scale(56),
+    marginRight: scale(-20), // intentional overhang (legacy parity)
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commScorePillContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: scale(8),
+  },
+  commScoreValue: {
+    fontSize: scale(20),
+    color: '#FFFFFF',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    marginRight: scale(6),
+  },
+  commScoreLabel: {
+    flexShrink: 1,
+    fontSize: scale(10),
+    color: '#FFFFFF',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: '600',
+  },
+
+  // ── Performance Result circles card (legacy parity) ──────────────
+  // 2x2 (or 1xN sectional) grid of skill ring gauges. Card wrapper
+  // mirrors the legacy Card1 shadow style; per-skill tile is the
+  // smaller white-bordered card the legacy SkillCard renders.
+  perfCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: scale(16),
+    marginTop: scale(16),
+    borderRadius: scale(16),
+    padding: scale(16),
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  perfHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: scale(12),
+  },
+  perfTitle: {
+    fontSize: scale(15),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+  perfGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  perfSkillCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: scale(16),
+    paddingVertical: scale(16),
+    marginBottom: scale(12),
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  perfCircleWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  perfCenterValue: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  perfValueText: {
+    fontSize: scale(16),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+  perfLabel: {
+    marginTop: scale(8),
+    fontSize: scale(13),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: '600',
+  },
+
+  // ── SkillBreakdownCard (horizontal bars view) ────────────────────
+  breakdownCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: scale(16),
+    marginTop: scale(16),
+    borderRadius: scale(16),
+    padding: scale(16),
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  breakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: scale(8),
+  },
+  breakdownTitle: {
+    fontSize: scale(15),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+  breakdownBars: {
+    marginTop: scale(12),
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: scale(6),
+  },
+  breakdownRowLabel: {
+    width: scale(70),
+    fontSize: scale(13),
+    color: '#6B7280',
+    fontFamily: 'BricolageGrotesque-Regular',
+  },
+  // Tiny axis ornaments the legacy bar view paints to anchor the
+  // bar visually to its label — small dash + vertical line before
+  // the colored bar starts.
+  breakdownAxisDash: {
+    width: scale(12),
+    height: 1,
+    backgroundColor: '#D1D5DB',
+  },
+  breakdownAxisLine: {
+    width: 1,
+    height: scale(36),
+    backgroundColor: '#D1D5DB',
+  },
+  breakdownBar: {
+    height: scale(22),
+    borderTopRightRadius: scale(4),
+    borderBottomRightRadius: scale(4),
+  },
+  breakdownRowValue: {
+    marginLeft: scale(8),
+    fontSize: scale(12),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+  },
+
+  // ── CandidateCenterDetails (info cards + upgrade CTA) ────────────
+  detailsCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: scale(16),
+    marginTop: scale(16),
+    borderRadius: scale(16),
+    padding: scale(16),
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  detailsCardTitle: {
+    fontSize: scale(15),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    marginBottom: scale(8),
+  },
+  detailsDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginBottom: scale(4),
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: scale(10),
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  infoLabel: {
+    fontSize: scale(13),
+    color: '#6B7280',
+    fontFamily: 'BricolageGrotesque-Regular',
+    flexShrink: 0,
+  },
+  infoValue: {
+    fontSize: scale(13),
+    color: '#111827',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: '600',
+    textAlign: 'right',
+    marginLeft: scale(12),
+    flexShrink: 1,
+  },
+  upgradeCard: {
+    backgroundColor: '#0B1D39',
+    borderRadius: scale(16),
+    paddingVertical: scale(20),
+    paddingHorizontal: scale(20),
+    marginHorizontal: scale(16),
+    marginTop: scale(16),
+  },
+  upgradeTitle: {
+    fontSize: scale(18),
+    color: '#FFFFFF',
+    fontFamily: 'BricolageGrotesque-Bold',
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: scale(6),
+  },
+  upgradeSubtitle: {
+    fontSize: scale(13),
+    color: '#CBD5E1',
+    fontFamily: 'BricolageGrotesque-Regular',
+    textAlign: 'center',
+    lineHeight: scale(18),
+  },
+
   // ── Section block (shared) ────────────────────────────────────────
   section: {
     marginTop: scale(24),

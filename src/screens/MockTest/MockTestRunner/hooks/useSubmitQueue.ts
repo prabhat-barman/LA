@@ -5,7 +5,12 @@ import {
   SUBMIT_MAX_RETRIES,
   SUBMIT_QUEUE_CONCURRENCY,
 } from '../constants';
-import { buildSubmitPayload, getRetryDelayMs } from '../helpers';
+import { logger } from '../../../../services/logger';
+import {
+  buildSubmitPayload,
+  dumpSubmitFormData,
+  getRetryDelayMs,
+} from '../helpers';
 import {
   clearPersistedQueueItems,
   loadPersistedQueueItems,
@@ -104,8 +109,25 @@ export const useSubmitQueue = (
     createSubmitQueue({
       submitFn: async (item: QueueItem) => {
         const formData = buildSubmitPayload(item.context);
+        // Debug dump every per-question submission so we can verify
+        // the wire payload without staring at "[Preview unavailable]"
+        // in devtools (the binary `file[]` blob makes the browser
+        // hide the parsed view of the request body). The dump is a
+        // simple array of `{name, value}` rows; file blobs surface
+        // as `<file uri=… name=… type=…>` strings so the URI is
+        // visible. Cheap enough to leave on — the rows array is
+        // small (~25 fields per submission).
+        logger.info('[SubmitMock] payload', {
+          questionId: item.context.answer.questionId,
+          subcategoryId: item.context.answer.subcategoryId,
+          questionNumber: item.context.questionNumber,
+          isPending: item.context.isPending,
+          isComplete: item.context.isComplete,
+          fields: dumpSubmitFormData(formData),
+        });
         // Axios sets the multipart boundary automatically when fed a
         // FormData instance — no explicit Content-Type needed.
+        console.log("RAW FormData _parts:", JSON.stringify((formData as any)._parts, null, 2));
         await apiClient.post(API_ENDPOINTS.SUBMIT_MOCK, formData);
       },
       maxConcurrency: SUBMIT_QUEUE_CONCURRENCY,

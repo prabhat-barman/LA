@@ -46,10 +46,11 @@ export const MockTestAnalysisScreen: React.FC<Props> = () => {
   const route = useRoute<Props['route']>();
   const insets = useSafeAreaInsets();
 
-  const { mockId, variant, category, title: routeTitle } = route.params;
+  const { mockId, variant, category, resultId, title: routeTitle } =
+    route.params;
 
   const { data, isLoading, isError, error, refetch, isRefetching } =
-    useMockAnalysis({ mockId });
+    useMockAnalysis({ mockId, variant, resultId });
 
   const [isDebugOpen, setIsDebugOpen] = useState(false);
 

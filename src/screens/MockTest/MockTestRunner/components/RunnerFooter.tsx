@@ -92,9 +92,6 @@ export const RunnerFooter: React.FC<Props> = ({
         <TouchableOpacity
           style={[
             styles.footerPrimaryBtn,
-            // Only expand to fill remaining width when sharing the row
-            // with the secondary button; otherwise stay full-bleed.
-            onSaveExit && styles.footerPrimaryBtnExpand,
             primaryDisabled && styles.footerPrimaryBtnDisabled,
           ]}
           onPress={handlePress}

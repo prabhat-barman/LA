@@ -831,7 +831,17 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
     !!session.sectionRanges[currentSectionIndex] &&
     currentIndex === session.sectionRanges[currentSectionIndex].endIndex &&
     currentSectionIndex < session.sectionRanges.length - 1;
-  const canSubmit = isAnswerComplete(currentDraft);
+  // Speaking is intentionally always submittable in mock mode —
+  // mirrors the legacy app where the user decides when to end the
+  // recording window. The confirm dialog on Next provides the
+  // "did you mean to?" guardrail; gating on draft completeness would
+  // trap users mid-recording with no way to advance. Non-speaking
+  // kinds still gate on `isAnswerComplete` so an accidental tap on
+  // an empty MCQ / blank input is caught.
+  const canSubmit =
+    currentQuestion?.kind === 'speaking'
+      ? true
+      : isAnswerComplete(currentDraft);
 
   // ── Render branches ──────────────────────────────────────────────
   if (isLoading) {

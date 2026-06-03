@@ -218,6 +218,30 @@ export const clearPersistedQueueItems = async (
   }
 };
 
+// Wipes every persisted unsent-answer record across all mocks.
+// Called on `MockTestScreen` mount so users don't see the legacy
+// "unsent answers from previous session" banner — once they land
+// on the mock list the slate is considered clean. Best-effort: any
+// AsyncStorage failure is swallowed since the recovery UI already
+// handles an empty list as the steady state.
+export const clearAllPersistedMocks = async (): Promise<void> => {
+  let keys: readonly string[];
+  try {
+    keys = await AsyncStorage.getAllKeys();
+  } catch {
+    return;
+  }
+  const queueKeys = keys.filter(k =>
+    k.startsWith(`${QUEUE_STORAGE_PREFIX}/`),
+  );
+  if (queueKeys.length === 0) return;
+  try {
+    await AsyncStorage.removeMany(queueKeys as string[]);
+  } catch {
+    // Best-effort — the next mount will try again anyway.
+  }
+};
+
 // Enumerates every mock with persisted failed items. Used by the
 // (future) app-level recovery banner to surface "you have N unsent
 // answers from previous mocks" without forcing the user to re-open

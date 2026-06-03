@@ -231,17 +231,29 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
         submittedAt: Date.now(),
       };
 
-      // Backend wants `audio_script` / `correct_answer` echoed back
-      // from the raw question payload — pull them straight off
-      // `q.raw` since they're not part of the normalized surface yet.
+      // Backend wants `audio_script` / `correct_answer` / `question`
+      // echoed back from the raw question payload — pull them
+      // straight off `q.raw` since they're not part of the normalized
+      // surface yet.
       const raw = (q.raw ?? {}) as {
         audio_script?: unknown;
         correct_answer?: unknown;
+        question?: unknown;
       };
       const audioScript =
         typeof raw.audio_script === 'string' ? raw.audio_script : null;
       const correctAnswer =
         typeof raw.correct_answer === 'string' ? raw.correct_answer : null;
+      // `text[]` source priority: raw.question (matches legacy app
+      // exactly), then the normalized prompt, then the title. Falling
+      // back to title rather than null/empty for non-prompt questions
+      // (image-describe, dictation) keeps the field non-empty so the
+      // backend has something to log.
+      const questionText =
+        (typeof raw.question === 'string' ? raw.question : null) ??
+        q.prompt ??
+        q.title ??
+        null;
 
       return {
         answer,
@@ -250,6 +262,7 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
         secondsSpentOnQuestion,
         remainingTotalSeconds: remainingSecRef.current,
         audioScript,
+        questionText,
         correctAnswer,
         // Highlight (subcategory 19) is the only kind that produces
         // an HTML answer. Phase 1.1.b doesn't render it yet, so

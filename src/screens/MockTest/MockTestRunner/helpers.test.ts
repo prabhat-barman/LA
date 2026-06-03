@@ -737,6 +737,7 @@ describe('MockTestRunner helpers', () => {
         secondsSpentOnQuestion: 45,
         remainingTotalSeconds: 1800,
         audioScript: null,
+        questionText: null,
         correctAnswer: null,
         htmlAnswer: null,
         isPending: false,
@@ -923,6 +924,60 @@ describe('MockTestRunner helpers', () => {
       // Non-speaking answer slots stay empty for speaking.
       expect(last('selected[]')).toBe('');
       expect(last('text_answer[]')).toBe('');
+      spy.mockRestore();
+    });
+
+    it('always appends file[] and text[] even when no recording / no prompt', () => {
+      // Regression for backend 500 (`foreach() ... null given`) seen
+      // when the user advances a Speaking question before the
+      // recording was captured. The PHP controller iterates these
+      // keys unconditionally; missing them blew up the request.
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 8,
+          draft: { kind: 'mcq-single', selectedId: 'a' },
+        }),
+      );
+      expect(last('file[]')).toBe('');
+      expect(last('duration[]')).toBe('');
+      expect(last('text[]')).toBe('');
+      spy.mockRestore();
+    });
+
+    it('appends empty file[] for speaking when no recording was captured', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 2,
+          // User advanced before the recorder produced a file —
+          // draft.audioFilePath is empty / durationSec is 0.
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '',
+            durationSec: 0,
+          },
+        }),
+      );
+      expect(last('file[]')).toBe('');
+      expect(last('duration[]')).toBe('');
+      spy.mockRestore();
+    });
+
+    it('echoes questionText into text[] when provided', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 1,
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '/tmp/a.m4a',
+            durationSec: 12,
+          },
+          questionText: 'Read the passage aloud.',
+        }),
+      );
+      expect(last('text[]')).toBe('Read the passage aloud.');
       spy.mockRestore();
     });
 

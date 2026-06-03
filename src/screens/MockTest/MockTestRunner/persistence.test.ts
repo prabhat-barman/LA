@@ -28,6 +28,7 @@ const makeCtx = (questionId: number | string): SubmitContext => ({
   secondsSpentOnQuestion: 30,
   remainingTotalSeconds: 1500,
   audioScript: null,
+  questionText: null,
   correctAnswer: null,
   htmlAnswer: null,
   isPending: false,

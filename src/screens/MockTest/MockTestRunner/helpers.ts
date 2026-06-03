@@ -758,6 +758,7 @@ export const buildSubmitPayload = (ctx: SubmitContext): FormData => {
     secondsSpentOnQuestion,
     remainingTotalSeconds,
     audioScript,
+    questionText,
     correctAnswer,
     htmlAnswer,
     isPending,
@@ -792,6 +793,10 @@ export const buildSubmitPayload = (ctx: SubmitContext): FormData => {
   // `lang[]` is unused on the wire today but the backend's parser
   // still expects the key — empty string keeps it happy.
   fd.append('lang[]', '');
+  // Legacy parity: backend reads `text[]` for every question type
+  // and 500s with `foreach() ... null given` when the key is
+  // missing. Always append even if empty.
+  fd.append('text[]', questionText ?? '');
 
   // Ground-truth echo. Backend duplicates the same value into four
   // legacy fields; we mirror that rather than fight it.
@@ -832,7 +837,16 @@ export const buildSubmitPayload = (ctx: SubmitContext): FormData => {
     fd.append('length[]', '');
   }
 
-  if (draft.kind === 'speaking') {
+  // Legacy parity: `file[]` is appended for EVERY question, with the
+  // recording for speaking (only when actually captured) or an empty
+  // string otherwise. Missing the key triggers a backend 500
+  // (`foreach() ... null given`) because the PHP controller iterates
+  // `$request->file('file')` unconditionally.
+  if (
+    draft.kind === 'speaking' &&
+    draft.audioFilePath &&
+    draft.durationSec > 0
+  ) {
     fd.append('file[]', {
       // RN's FormData accepts this (uri, name, type) tuple shape at
       // runtime; the type assertion silences the DOM-typed mismatch.
@@ -842,6 +856,7 @@ export const buildSubmitPayload = (ctx: SubmitContext): FormData => {
     } as unknown as Blob);
     fd.append('duration[]', formatDurationMMSS(draft.durationSec));
   } else {
+    fd.append('file[]', '');
     fd.append('duration[]', '');
   }
 

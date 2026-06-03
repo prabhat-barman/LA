@@ -16,6 +16,7 @@ const makeContext = (questionId: string | number): SubmitContext => ({
   secondsSpentOnQuestion: 10,
   remainingTotalSeconds: 1000,
   audioScript: null,
+  questionText: null,
   correctAnswer: null,
   htmlAnswer: null,
   isPending: false,

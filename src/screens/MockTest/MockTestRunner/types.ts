@@ -166,6 +166,12 @@ export interface SubmitContext {
   // The question's `audio_script` (or null) — echoed back to the
   // backend in `script[]`. Kept opaque; runner pulls it from `Question`.
   audioScript: string | null;
+  // The question's display/prompt text — echoed back to the backend
+  // in `text[]`. Legacy app always sends this for every question
+  // type; omitting it causes a `foreach() ... null given` 500 on the
+  // PHP side when the controller iterates the input. Empty string
+  // when no prompt is available rather than missing the key.
+  questionText: string | null;
   // Ground truth from the question payload — backend wants it echoed
   // in `answer[]`, `ans[]`, `q_ans[]`, `correct[]` (legacy, but
   // required). Null for question kinds where no canonical answer exists.

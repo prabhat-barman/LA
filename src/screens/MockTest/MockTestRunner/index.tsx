@@ -17,6 +17,7 @@ import { API_ENDPOINTS } from '../../../config/apiConfig';
 import apiClient from '../../../services/apiClient';
 import { logger } from '../../../services/logger';
 import { QuestionRouter } from './components/QuestionRouter';
+import type { SpeakingQuestionRef } from './components/SpeakingQuestion';
 import { RunnerFooter } from './components/RunnerFooter';
 import { SectionBreakOverlay } from './components/SectionBreakOverlay';
 import { SubmissionRetryOverlay } from './components/SubmissionRetryOverlay';
@@ -143,6 +144,13 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
   // Latest remaining-time value, in a ref so the auto-submit on
   // expire path can read it synchronously without re-rendering.
   const remainingSecRef = useRef(0);
+  // Imperative handle into the active SpeakingQuestion (when one is
+  // rendered). The runner reaches into it from `handleNext` to flush
+  // an in-progress recording → `onRecordingComplete` fires → answer
+  // map is populated → only then do we advance. Without this the
+  // recorder would be torn down on unmount without the file path
+  // ever surfacing into the SUBMIT_MOCK payload.
+  const speakingRef = useRef<SpeakingQuestionRef>(null);
 
   // Sync currentIndex from session.startIndex on first load (resume).
   // Also pre-seed `currentSectionIndex` from the startIndex so the
@@ -551,7 +559,9 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
     [answers, buildSubmitContext, currentIndex, mockId, session, submitQueue],
   );
 
-  const handleNext = useCallback(() => {
+  // Performs the actual advance — extracted so the confirm-dialog
+  // branch below can call it after the recording flush resolves.
+  const advanceToNext = useCallback(() => {
     if (!session || !currentQuestion) return;
 
     const ctx = buildSubmitContext({
@@ -595,6 +605,40 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
     session,
     submitQueue,
   ]);
+
+  // Confirmation gate before every Next press in mock tests. Mocks
+  // are one-shot — once you advance you cannot return — so we mirror
+  // the legacy app's "are you sure?" prompt to prevent accidental
+  // skips, especially while a Speaking recording is still capturing
+  // audio. On confirm we await `finishRecording` so the recorder's
+  // file path lands in the answer map before `advanceToNext` enqueues
+  // the SUBMIT_MOCK payload.
+  const handleNext = useCallback(() => {
+    if (!session || !currentQuestion) return;
+    Alert.alert(
+      'Move to next question?',
+      'You won\u2019t be able to return to this question.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Next',
+          onPress: () => {
+            void (async () => {
+              try {
+                await speakingRef.current?.finishRecording();
+              } catch (err) {
+                logger.warn(
+                  '[MockTestRunner] finishRecording on Next failed',
+                  err instanceof Error ? err.message : String(err),
+                );
+              }
+              advanceToNext();
+            })();
+          },
+        },
+      ],
+    );
+  }, [advanceToNext, currentQuestion, session]);
 
   // Called when the user dismisses the section-break overlay. Flushes
   // any not-yet-submitted questions in the completed section, jumps
@@ -716,21 +760,48 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
     submitQueue,
   ]);
 
+  // Submit Test confirm + finalize. Mirrors handleNext's pattern:
+  // (1) confirm so a stray tap doesn't end the attempt, (2) flush any
+  // in-flight Speaking recording so the last question's audio path
+  // lands in the answer map before `buildSubmitContext` captures it.
   const handleFinalSubmit = useCallback(() => {
     if (!session || !currentQuestion) return;
-    const ctx = buildSubmitContext({
-      index: currentIndex,
-      draft: currentDraft,
-      isPending: false,
-      isComplete: true,
-    });
-    if (ctx) {
-      submitQueue.enqueue({
-        id: buildQueueItemId(mockId, ctx.answer.questionId),
-        context: ctx,
-      });
-    }
-    finalizeAndExit().catch(() => {});
+    Alert.alert(
+      'Submit test?',
+      'Once submitted, you cannot change any answers.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Submit',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                await speakingRef.current?.finishRecording();
+              } catch (err) {
+                logger.warn(
+                  '[MockTestRunner] finishRecording on Submit failed',
+                  err instanceof Error ? err.message : String(err),
+                );
+              }
+              const ctx = buildSubmitContext({
+                index: currentIndex,
+                draft: currentDraft,
+                isPending: false,
+                isComplete: true,
+              });
+              if (ctx) {
+                submitQueue.enqueue({
+                  id: buildQueueItemId(mockId, ctx.answer.questionId),
+                  context: ctx,
+                });
+              }
+              finalizeAndExit().catch(() => {});
+            })();
+          },
+        },
+      ],
+    );
   }, [
     buildSubmitContext,
     currentDraft,
@@ -893,9 +964,11 @@ export const MockTestRunnerScreen: React.FC<Props> = ({ route, navigation }) => 
               <Text style={styles.questionTitle}>{currentQuestion.title}</Text>
             )}
             <QuestionRouter
+              ref={speakingRef}
               question={currentQuestion}
               draft={currentDraft}
               onAnswerChange={handleAnswerChange}
+              hideStopButton
             />
           </View>
         ) : (

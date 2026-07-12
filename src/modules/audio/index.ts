@@ -5,4 +5,8 @@ export { default as WaveformSeekBar } from './WaveformSeekBar';
 export { default as MicrophoneCheckPlayer } from './MicrophoneCheckPlayer';
 export { default as HeadsetCheckPlayer } from './HeadsetCheckPlayer';
 export { default as AutoPlayAudioRecorder } from './AutoPlayAudioRecorder';
+export type {
+  AutoPlayAudioRecorderProps,
+  AutoPlayAudioRecorderRef,
+} from './AutoPlayAudioRecorder/types';
 export { default as AudioModuleScreen } from './AudioModuleScreen';

@@ -12,6 +12,12 @@ interface Props {
   onToggleTranscript: () => void;
   onToggleTranslation: () => void;
   onToggleSample: () => void;
+  // Optional explanation pill — only rendered when the host screen
+  // has a submit result that supports an explanation (Reading /
+  // Listening MCQ + FIB). Passing undefined hides the pill.
+  showExplanation?: boolean;
+  onToggleExplanation?: () => void;
+  explanationAvailable?: boolean;
 }
 
 // Three pill-style toggles that expand/collapse the inline expand panels
@@ -24,6 +30,9 @@ export const CardActionsRow: React.FC<Props> = ({
   onToggleTranscript,
   onToggleTranslation,
   onToggleSample,
+  showExplanation,
+  onToggleExplanation,
+  explanationAvailable,
 }) => (
   <View style={styles.cardActionsRow}>
     {hasAudio && (
@@ -97,5 +106,25 @@ export const CardActionsRow: React.FC<Props> = ({
         {'Sample\nResponse'}
       </Text>
     </TouchableOpacity>
+
+    {explanationAvailable && onToggleExplanation && (
+      <TouchableOpacity
+        style={[styles.outlineBtn, showExplanation && styles.outlineBtnActive]}
+        onPress={onToggleExplanation}
+      >
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.82}
+          style={[
+            styles.outlineBtnText,
+            styles.outlineBtnTextSingleLine,
+            showExplanation && styles.outlineBtnTextActive,
+          ]}
+        >
+          Explanation
+        </Text>
+      </TouchableOpacity>
+    )}
   </View>
 );

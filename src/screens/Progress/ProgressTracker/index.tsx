@@ -209,6 +209,7 @@ export const ProgressTrackerScreen: React.FC = () => {
       >
         {renderBody()}
       </ScrollView>
+
     </View>
   );
 };

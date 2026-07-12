@@ -29,8 +29,7 @@ import type { PendingMock } from './MockTestRunner/types';
 import { usePastMocks } from './MockTestResult/hooks/usePastMocks';
 import type { PastMock } from './MockTestResult/types';
 import { describeScoreBand } from './MockTestResult/helpers';
-import { useRecoveryMocks } from './hooks/useRecoveryMocks';
-import { RecoveryBanner } from './components/RecoveryBanner';
+import { clearAllPersistedMocks } from './MockTestRunner/persistence';
 
 type ToggleKind = 'Mock Test' | 'Extensive Mock Test';
 type CategoryKind = 'Speaking' | 'Writing' | 'Reading' | 'Listening' | 'Full Mock';
@@ -169,20 +168,16 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
   // they're currently filtered on.
   const pendingQuery = usePendingMocks();
   const pastQuery = usePastMocks();
-  // Phase 2.3 — App-level cross-restart recovery surface. Lists
-  // every mockId with persisted failed submissions from previous
-  // sessions and offers a one-tap retry without re-opening the
-  // runner. Empty when there's nothing to recover.
-  const recovery = useRecoveryMocks();
 
-  // Re-probe AsyncStorage whenever the screen comes into focus. The
-  // user might have just finished a recovery in the runner (banner
-  // there → tap Retry → success → storage cleared) and we want the
-  // app-level banner to reflect that without forcing a pull-to-refresh.
+  // The cross-session recovery banner was deliberately removed (per
+  // user request — "list pe aate hi clear ho jaye"). Instead we
+  // silently wipe any persisted unsent-answer records every time
+  // the screen comes into focus. Trade-off: a genuine crash mid-mock
+  // loses its pending queue, but the user prefers the cleaner UI.
   useFocusEffect(
     useCallback(() => {
-      recovery.refetch();
-    }, [recovery]),
+      clearAllPersistedMocks().catch(() => {});
+    }, []),
   );
 
   // "Full Mock" is only available in the normal Mock Test toggle, not in Extensive.
@@ -277,8 +272,10 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
     // in parallel.
     pendingQuery.refetch();
     pastQuery.refetch();
-    recovery.refetch();
-  }, [fetchMocks, isExtensive, pendingQuery, pastQuery, recovery]);
+    // Also wipe any newly-persisted unsent records — pull-to-refresh
+    // is effectively the user saying "give me a clean slate".
+    clearAllPersistedMocks().catch(() => {});
+  }, [fetchMocks, isExtensive, pendingQuery, pastQuery]);
 
   // Resume tap → bypass the prereq carousel entirely. The user has
   // already cleared headset/mic/keyboard checks for this attempt, so
@@ -311,6 +308,7 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
         mockId: past.mockId,
         variant: past.variant,
         category: past.category,
+        resultId: past.resultId,
         title: past.title,
       });
     },
@@ -417,28 +415,19 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
           />
         }
       >
-        {/* --- Unsent Answers Recovery (Phase 2.3) ---
-            Surfaced ABOVE the In Progress rail because data-loss
-            recovery is higher-priority than session-resume: an
-            unsent answer is invisible to the user until they retry.
-            Self-hides when there's nothing persisted. */}
-        <RecoveryBanner
-          persistedMocks={recovery.persistedMocks}
-          retryingMockId={recovery.retryingMockId}
-          onRetryMock={recovery.retryMock}
-        />
-
         {/* --- Toggle & Filter Row --- */}
         <View style={styles.toggleWrapper}>
           <View style={styles.toggleContainer}>
             <TouchableOpacity
               style={[
                 styles.toggleButton,
+                styles.toggleButtonShort,
                 activeToggle === 'Mock Test' && styles.toggleButtonActive,
               ]}
               onPress={() => setActiveToggle('Mock Test')}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.toggleButtonText,
                   activeToggle === 'Mock Test' && styles.toggleButtonTextActive,
@@ -450,11 +439,13 @@ export const MockTestScreen: React.FC<Partial<MockTestScreenProps>> = (props) =>
             <TouchableOpacity
               style={[
                 styles.toggleButton,
+                styles.toggleButtonLong,
                 activeToggle === 'Extensive Mock Test' && styles.toggleButtonActive,
               ]}
               onPress={() => setActiveToggle('Extensive Mock Test')}
             >
               <Text
+                numberOfLines={1}
                 style={[
                   styles.toggleButtonText,
                   activeToggle === 'Extensive Mock Test' && styles.toggleButtonTextActive,
@@ -1313,10 +1304,21 @@ const styles = StyleSheet.create({
     fontFamily: 'BricolageGrotesque-Bold',
   },
   toggleButton: {
-    flex: 1,
     paddingVertical: scale(10),
+    paddingHorizontal: scale(14),
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: scale(18),
+  },
+  // Weighted widths so both labels render at the same font size
+  // without the longer "Extensive Mock Test" string getting cramped
+  // or shrunk. Ratio is roughly the visual width of the two strings
+  // at fontSize 13 with semibold weight.
+  toggleButtonShort: {
+    flex: 1,
+  },
+  toggleButtonLong: {
+    flex: 1.7,
   },
   toggleButtonActive: {
     backgroundColor: '#1C1F2A',
@@ -1326,6 +1328,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     fontWeight: 'bold',
     fontFamily: 'BricolageGrotesque-SemiBold',
+    textAlign: 'center',
   },
   toggleButtonTextActive: {
     color: colors.white,

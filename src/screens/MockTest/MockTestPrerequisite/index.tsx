@@ -7,6 +7,7 @@ import {
   type ListRenderItem,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  StatusBar,
   Text,
   TouchableOpacity,
   View,
@@ -259,6 +260,10 @@ export const MockTestPrerequisiteScreen: React.FC = () => {
   // ── Layout ──────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
+      {/* Dark navy header (#0D112B) needs white status bar icons; the
+       * StatusBar component is auto-managed across focus/unfocus so the
+       * previous screen's setting is restored on back-navigation. */}
+      <StatusBar barStyle="light-content" backgroundColor="#0D112B" />
       <View
         style={[
           styles.header,
@@ -339,6 +344,7 @@ export const MockTestPrerequisiteScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
       </View>
+
     </View>
   );
 };

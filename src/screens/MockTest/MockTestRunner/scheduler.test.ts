@@ -16,11 +16,16 @@ const makeContext = (questionId: string | number): SubmitContext => ({
   secondsSpentOnQuestion: 10,
   remainingTotalSeconds: 1000,
   audioScript: null,
+  questionText: null,
   correctAnswer: null,
+  rawAnswer: null,
   htmlAnswer: null,
   isPending: false,
   isComplete: false,
   platform: 'android',
+  variant: 'full',
+  category: 'Speaking',
+  currentSectionIndex: 0,
 });
 
 // Tiny "controlled deferred" helper for asserting concurrency and ordering.

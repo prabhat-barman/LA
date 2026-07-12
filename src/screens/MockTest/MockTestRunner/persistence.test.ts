@@ -28,11 +28,16 @@ const makeCtx = (questionId: number | string): SubmitContext => ({
   secondsSpentOnQuestion: 30,
   remainingTotalSeconds: 1500,
   audioScript: null,
+  questionText: null,
   correctAnswer: null,
+  rawAnswer: null,
   htmlAnswer: null,
   isPending: false,
   isComplete: false,
   platform: 'ios',
+  variant: 'full',
+  category: 'Speaking',
+  currentSectionIndex: 0,
 });
 
 const makeItem = (overrides: Partial<QueueItem>): QueueItem => ({

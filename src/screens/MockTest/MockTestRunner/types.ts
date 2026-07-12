@@ -166,10 +166,22 @@ export interface SubmitContext {
   // The question's `audio_script` (or null) — echoed back to the
   // backend in `script[]`. Kept opaque; runner pulls it from `Question`.
   audioScript: string | null;
+  // The question's display/prompt text — echoed back to the backend
+  // in `text[]`. Legacy app always sends this for every question
+  // type; omitting it causes a `foreach() ... null given` 500 on the
+  // PHP side when the controller iterates the input. Empty string
+  // when no prompt is available rather than missing the key.
+  questionText: string | null;
   // Ground truth from the question payload — backend wants it echoed
   // in `answer[]`, `ans[]`, `q_ans[]`, `correct[]` (legacy, but
   // required). Null for question kinds where no canonical answer exists.
   correctAnswer: string | null;
+  // The raw `answer` field straight off the question payload. Distinct
+  // from `correctAnswer` (which is the cleaned ground-truth string the
+  // backend wants in `correct[]`) — `rawAnswer` is what legacy ships
+  // into `ans[]` / `q_ans[]` / `answer[]` for question kinds where the
+  // original markup matters (highlight subcategory 19, default fallback).
+  rawAnswer: string | null;
   // HTML representation of the user's selection — only meaningful for
   // word-highlight (subcategory 19). Null otherwise.
   htmlAnswer: string | null;
@@ -179,6 +191,10 @@ export interface SubmitContext {
   isComplete: boolean;
   // Device platform string the backend wants in `isPlatform`.
   platform: 'android' | 'ios';
+  // Contextual metadata for mock test flow mapping
+  variant: MockTestVariant;
+  category: MockSection | 'Full Mock';
+  currentSectionIndex: number;
 }
 
 export type QueueStatus = 'pending' | 'in-flight' | 'succeeded' | 'failed';

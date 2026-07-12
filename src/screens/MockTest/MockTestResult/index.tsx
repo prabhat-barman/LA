@@ -12,10 +12,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../../../navigation/AppNavigator';
 import { logger } from '../../../services/logger';
+import { CandidateCenterDetails } from './components/CandidateCenterDetails';
+import { CommunicationScoreCard } from './components/CommunicationScoreCard';
 import { EnablingSkillsCard } from './components/EnablingSkillsCard';
-import { OverallScoreCard } from './components/OverallScoreCard';
+import { PerformanceResultCircles } from './components/PerformanceResultCircles';
 import { RawResponseSheet } from './components/RawResponseSheet';
-import { SectionScoreCard } from './components/SectionScoreCard';
+import { SkillBreakdownCard } from './components/SkillBreakdownCard';
 import { useMockResult } from './hooks/useMockResult';
 import { styles } from './styles';
 
@@ -38,13 +40,15 @@ export const MockTestResultScreen: React.FC<Props> = () => {
   const route = useRoute<Props['route']>();
   const insets = useSafeAreaInsets();
 
-  const { mockId, variant, category, title: routeTitle } = route.params;
+  const { mockId, variant, category, resultId, title: routeTitle } =
+    route.params;
 
   const { data, isLoading, isError, error, refetch, isRefetching } =
     useMockResult({
       mockId,
       variant,
       category,
+      resultId,
       fallbackTitle: routeTitle,
     });
 
@@ -136,14 +140,18 @@ export const MockTestResultScreen: React.FC<Props> = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <OverallScoreCard
+          <CommunicationScoreCard
+            user={data.userInfo}
             score={data.overall}
-            attempted={data.attemptedQuestions}
-            total={data.totalQuestions}
+            label={data.scoreLabel}
+          />
+          <PerformanceResultCircles sections={data.sections} />
+          <SkillBreakdownCard sections={data.sections} />
+          <EnablingSkillsCard skills={data.enablingSkills} />
+          <CandidateCenterDetails
+            user={data.userInfo}
             submittedAtIso={data.submittedAtIso}
           />
-          <SectionScoreCard sections={data.sections} />
-          <EnablingSkillsCard skills={data.enablingSkills} />
           {/* Drill-in to the per-question analysis. `navigate` (NOT
               replace) — the user expects back-swipe to return to the
               overall score, then again to the mock list. */}
@@ -154,6 +162,7 @@ export const MockTestResultScreen: React.FC<Props> = () => {
                 mockId,
                 variant,
                 category,
+                resultId,
                 title: data.title,
               })
             }

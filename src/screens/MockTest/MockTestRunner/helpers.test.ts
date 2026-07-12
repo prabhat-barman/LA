@@ -8,6 +8,7 @@ import {
   buildSectionRanges,
   countWords,
   findSectionIndexForQuestion,
+  getGroundTruth,
   normalizePendingMock,
   parseFibQuestion,
   tokenizeHighlightAnswer,
@@ -698,6 +699,32 @@ describe('MockTestRunner helpers', () => {
         expect(p?.category).toBe(label);
       }
     });
+
+    it('parses nested mock object and category object wrapped keys correctly', () => {
+      const p = normalizePendingMock(
+        {
+          id: 101, // session id
+          total_remaining_time: 1200,
+          mock: {
+            id: 42, // actual mock id
+            title: 'Nested Mock Test',
+            category: { id: 1 }, // category Speaking
+            q_count: 25,
+          },
+        },
+        { variant: 'full' },
+      );
+      expect(p).toEqual({
+        mockId: 42,
+        variant: 'full',
+        category: 'Speaking',
+        title: 'Nested Mock Test',
+        startQuestionIndex: 0,
+        remainingSecondsTotal: 1200,
+        totalQuestions: 25,
+        raw: expect.any(Object),
+      });
+    });
   });
 
   describe('buildSubmitPayload', () => {
@@ -737,11 +764,16 @@ describe('MockTestRunner helpers', () => {
         secondsSpentOnQuestion: 45,
         remainingTotalSeconds: 1800,
         audioScript: null,
+        questionText: null,
         correctAnswer: null,
+        rawAnswer: null,
         htmlAnswer: null,
         isPending: false,
         isComplete: false,
         platform: 'android',
+        variant: 'full',
+        category: 'Writing',
+        currentSectionIndex: 0,
         ...rest,
       };
     };
@@ -754,18 +786,24 @@ describe('MockTestRunner helpers', () => {
           draft: { kind: 'writing', text: 'hi' },
         }),
       );
-      expect(last('mock_id')).toBe('9');
-      expect(last('q_count')).toBe('20');
-      expect(last('q_time')).toBe('45');
-      expect(last('time')).toBe('1800');
-      expect(last('pending')).toBe('0');
-      expect(last('complete')).toBe('0');
-      expect(last('skip')).toBe('0');
+      expect(last('mock_id')).toBe(9);
+      expect(last('q_count')).toBe(20);
+      expect(last('q_time')).toBe(45);
+      expect(last('time')).toBe(1800);
+      // Legacy parity: every per-question submission ships pending=1
+      // (including the final one). `complete` is the flag that
+      // distinguishes a final submit.
+      expect(last('pending')).toBe(1);
+      expect(last('complete')).toBe(0);
+      expect(last('skip')).toBeUndefined(); // Normal Mock omits skip
       expect(last('device')).toBe('mobile');
       expect(last('isPlatform')).toBe('android');
-      expect(last('question_number')).toBe('3');
-      expect(last('curr_q')).toBe('3');
-      expect(last('audio_text')).toBe('');
+      expect(last('question_number')).toBe(3);
+      expect(last('curr_q')).toBe(3);
+      // Legacy sends literal null for `audio_text` — RN's FormData
+      // stores the raw value and the network layer stringifies on
+      // the wire ("null").
+      expect(last('audio_text')).toBeNull();
       spy.mockRestore();
     });
 
@@ -779,12 +817,13 @@ describe('MockTestRunner helpers', () => {
           correctAnswer: '7',
         }),
       );
-      expect(last('id[]')).toBe('42');
-      expect(last('type[]')).toBe('8');
-      expect(last('response[]')).toBe('true');
+      expect(last('id[]')).toBe(42);
+      expect(last('type[]')).toBe(8);
+      expect(last('response[]')).toBe(true);
       expect(last('script[]')).toBe('The script.');
-      expect(last('lang[]')).toBe('');
-      // Backend echoes the correct answer into four legacy fields.
+      // Legacy sends `null` (not "") for `lang[]` on every submission.
+      expect(last('lang[]')).toBeNull();
+      // sub 8 is in GROUND_TRUTH_ECHO_SUBS — all four fields = ground.
       expect(last('answer[]')).toBe('7');
       expect(last('ans[]')).toBe('7');
       expect(last('q_ans[]')).toBe('7');
@@ -792,7 +831,7 @@ describe('MockTestRunner helpers', () => {
       spy.mockRestore();
     });
 
-    it('flips pending/complete flags and zeros curr_q on final submit', () => {
+    it('keeps pending=1 and flips complete/curr_q on final submit', () => {
       const { spy, last } = captureFormDataAppends();
       buildSubmitPayload(
         makeContext({
@@ -801,13 +840,16 @@ describe('MockTestRunner helpers', () => {
           isComplete: true,
         }),
       );
-      expect(last('pending')).toBe('0');
-      expect(last('complete')).toBe('1');
-      expect(last('curr_q')).toBe('0');
+      // Legacy parity: `pending` stays 1 for EVERY submission,
+      // including the final one — `complete` is the "attempt is
+      // done" handshake.
+      expect(last('pending')).toBe(1);
+      expect(last('complete')).toBe(1);
+      expect(last('curr_q')).toBe(0);
       spy.mockRestore();
     });
 
-    it('marks a save-and-exit with pending=1', () => {
+    it('keeps pending=1 on a save-and-exit (matches the regular Next contract)', () => {
       const { spy, last } = captureFormDataAppends();
       buildSubmitPayload(
         makeContext({
@@ -816,8 +858,75 @@ describe('MockTestRunner helpers', () => {
           isPending: true,
         }),
       );
-      expect(last('pending')).toBe('1');
-      expect(last('complete')).toBe('0');
+      // Legacy treats save-and-exit identically to a regular Next at
+      // the wire level — both ship pending=1, complete=0. The
+      // `isPending` flag survives for UI-side messaging only.
+      expect(last('pending')).toBe(1);
+      expect(last('complete')).toBe(0);
+      spy.mockRestore();
+    });
+
+    it('handles Full Mock and Extensive Mock variations', () => {
+      const { spy, last } = captureFormDataAppends();
+
+      // Test Full Mock, section 1 complete
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 7,
+          draft: { kind: 'writing', text: 'done' },
+          isComplete: true,
+          variant: 'full',
+          category: 'Full Mock',
+          currentSectionIndex: 0,
+        }),
+      );
+      expect(last('pending')).toBe(1);
+      expect(last('complete')).toBe(0); // Only complete=1 on Section 3 (index 2)
+      expect(last('skip')).toBe(1); // Section 1 complete -> skip: 1
+
+      // Test Full Mock, section 3 complete
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 13,
+          draft: { kind: 'writing', text: 'done' },
+          isComplete: true,
+          variant: 'full',
+          category: 'Full Mock',
+          currentSectionIndex: 2,
+        }),
+      );
+      expect(last('pending')).toBe(1);
+      expect(last('complete')).toBe(1); // Section 3 complete -> complete: 1
+      expect(last('skip')).toBe(2); // Section 3 complete -> skip: 2
+
+      // Test Extensive Mock, save and exit
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 6,
+          draft: { kind: 'writing', text: 'partial' },
+          isPending: true,
+          variant: 'extensive',
+          category: 'Speaking',
+        }),
+      );
+      expect(last('pending')).toBe(1); // pending: 1
+      expect(last('complete')).toBe(0);
+      expect(last('skip')).toBe(0);
+
+      // Test Extensive Mock, final submission
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 6,
+          draft: { kind: 'writing', text: 'done' },
+          isComplete: true,
+          variant: 'extensive',
+          category: 'Speaking',
+        }),
+      );
+      expect(last('pending')).toBe(0); // pending: 0
+      expect(last('complete')).toBe(1); // complete: 1
+      expect(last('skip')).toBe(0);
+
       spy.mockRestore();
     });
 
@@ -830,11 +939,14 @@ describe('MockTestRunner helpers', () => {
         }),
       );
       expect(last('text_answer[]')).toBe('Today the world is changing fast.');
-      expect(last('length[]')).toBe('6');
-      // Selection-shaped fields stay empty for writing.
-      expect(last('selected[]')).toBe('');
-      expect(last('duration[]')).toBe('');
-      expect(last('html[]')).toBe('');
+      expect(last('length[]')).toBe(6);
+      // Writing with no selection — legacy nulls selected[].
+      expect(last('selected[]')).toBeNull();
+      // Legacy parity: duration[] is always MM:SS, "00:00" when no
+      // recording (vs blank).
+      expect(last('duration[]')).toBe('00:00');
+      // html[] is null when no highlight markup provided.
+      expect(last('html[]')).toBeNull();
       spy.mockRestore();
     });
 
@@ -847,8 +959,9 @@ describe('MockTestRunner helpers', () => {
         }),
       );
       expect(last('selected[]')).toBe('a,b,c');
-      expect(last('text_answer[]')).toBe('');
-      expect(last('length[]')).toBe('');
+      // Non-writing non-FIB → text_answer[]/length[] nulled per legacy.
+      expect(last('text_answer[]')).toBeNull();
+      expect(last('length[]')).toBeNull();
       spy.mockRestore();
     });
 
@@ -903,7 +1016,7 @@ describe('MockTestRunner helpers', () => {
       spy.mockRestore();
     });
 
-    it('appends file[] and duration[] for speaking answers', () => {
+    it('appends platform-specific file[] and duration[] for speaking answers', () => {
       const { spy, last } = captureFormDataAppends();
       buildSubmitPayload(
         makeContext({
@@ -913,16 +1026,136 @@ describe('MockTestRunner helpers', () => {
             audioFilePath: '/tmp/answer-42.m4a',
             durationSec: 28,
           },
+          platform: 'ios',
         }),
       );
       expect(last('duration[]')).toBe('00:28');
       const file = last('file[]') as { uri: string; name: string; type: string };
       expect(file.uri).toBe('/tmp/answer-42.m4a');
-      expect(file.name).toBe('answer-42.m4a');
+      // Legacy parity: filename is `<question_id>.<ext>` and the
+      // extension follows the OS (iOS = m4a, Android = mp4).
+      expect(file.name).toBe('42.m4a');
       expect(file.type).toBe('audio/m4a');
-      // Non-speaking answer slots stay empty for speaking.
-      expect(last('selected[]')).toBe('');
-      expect(last('text_answer[]')).toBe('');
+      // Speaking nulls selected[]/text_answer[]/length[] (the
+      // "answer" is the audio blob, not a text input).
+      expect(last('selected[]')).toBeNull();
+      expect(last('text_answer[]')).toBeNull();
+      spy.mockRestore();
+    });
+
+    it('uses audio/mp4 + .mp4 filename on android speaking submissions', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 2,
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '/data/recording.mp4',
+            durationSec: 9,
+          },
+          platform: 'android',
+        }),
+      );
+      const file = last('file[]') as { uri: string; name: string; type: string };
+      expect(file.name).toBe('42.mp4');
+      expect(file.type).toBe('audio/mp4');
+      spy.mockRestore();
+    });
+
+    it('always appends file[] and text[] even when no recording / no prompt', () => {
+      // Regression for backend 500 (`foreach() ... null given`) seen
+      // when the user advances a Speaking question before the
+      // recording was captured. The PHP controller iterates these
+      // keys unconditionally; missing them blew up the request.
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 8,
+          draft: { kind: 'mcq-single', selectedId: 'a' },
+        }),
+      );
+      // Legacy ships `null` (not empty string) for `file[]` when no
+      // recording was captured — backend's PHP controller branches
+      // on null vs empty string differently.
+      expect(last('file[]')).toBeNull();
+      expect(last('duration[]')).toBe('00:00');
+      expect(last('text[]')).toBe('');
+      spy.mockRestore();
+    });
+
+    it('appends null file[] for speaking when no recording was captured', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 2,
+          // User advanced before the recorder produced a file —
+          // draft.audioFilePath is empty / durationSec is 0.
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '',
+            durationSec: 0,
+          },
+        }),
+      );
+      expect(last('file[]')).toBeNull();
+      // Legacy parity: duration[] ships as "00:00" even when there's
+      // no recording, never as an empty string.
+      expect(last('duration[]')).toBe('00:00');
+      spy.mockRestore();
+    });
+
+    it('echoes questionText into text[] when provided', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 1,
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '/tmp/a.m4a',
+            durationSec: 12,
+          },
+          questionText: 'Read the passage aloud.',
+        }),
+      );
+      expect(last('text[]')).toBe('Read the passage aloud.');
+      spy.mockRestore();
+    });
+
+    it('appends strategy="1" for Read Aloud (sub 1) and nulls script[]', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 1,
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '/tmp/r.m4a',
+            durationSec: 8,
+          },
+          audioScript: 'ignored for sub 1',
+        }),
+      );
+      expect(last('strategy')).toBe('1');
+      // Legacy explicitly nulls script[] for sub 1, even when the
+      // question's audio_script field is populated.
+      expect(last('script[]')).toBeNull();
+      // answer[] is nulled for sub 1 (in GROUND_TRUTH_NULL_ANSWER_SUBS).
+      expect(last('answer[]')).toBeNull();
+      spy.mockRestore();
+    });
+
+    it('omits strategy for non-Read-Aloud subcategories', () => {
+      const { spy, all } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 2,
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '/tmp/r.m4a',
+            durationSec: 4,
+          },
+        }),
+      );
+      expect(all('strategy')).toHaveLength(0);
       spy.mockRestore();
     });
 
@@ -944,7 +1177,7 @@ describe('MockTestRunner helpers', () => {
       spy.mockRestore();
     });
 
-    it('writes empty values for the empty draft so the parser never 400s', () => {
+    it('writes nulls for the empty draft (sub 1) so the parser never 400s', () => {
       const { spy, last } = captureFormDataAppends();
       buildSubmitPayload(
         makeContext({
@@ -952,13 +1185,183 @@ describe('MockTestRunner helpers', () => {
           draft: { kind: 'empty' },
         }),
       );
-      expect(last('selected[]')).toBe('');
-      expect(last('text_answer[]')).toBe('');
-      expect(last('length[]')).toBe('');
-      expect(last('duration[]')).toBe('');
-      expect(last('html[]')).toBe('');
-      expect(last('answer[]')).toBe('');
+      // sub 1 is speaking → selected/text_answer/length all nulled.
+      expect(last('selected[]')).toBeNull();
+      expect(last('text_answer[]')).toBeNull();
+      expect(last('length[]')).toBeNull();
+      expect(last('duration[]')).toBe('00:00');
+      expect(last('html[]')).toBeNull();
+      // sub 1 nullifies answer[] but echoes ground into the other three.
+      expect(last('answer[]')).toBeNull();
       spy.mockRestore();
+    });
+
+    it('maps sub 19 (highlight) ans/q_ans to rawAnswer (the raw markup)', () => {
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 19,
+          draft: {
+            kind: 'highlight',
+            selectedIndices: [],
+            selectedWords: [],
+          },
+          correctAnswer: 'word1,word2',
+          rawAnswer: 'word0,<span id="cAns">word1</span>',
+        }),
+      );
+      // answer[]/correct[] = cleaned ground truth
+      expect(last('answer[]')).toBe('word1,word2');
+      expect(last('correct[]')).toBe('word1,word2');
+      // ans[]/q_ans[] = raw markup off the question payload
+      expect(last('ans[]')).toBe('word0,<span id="cAns">word1</span>');
+      expect(last('q_ans[]')).toBe('word0,<span id="cAns">word1</span>');
+      spy.mockRestore();
+    });
+
+    it('default kind (e.g. sub 4 Retell Lecture) puts rawAnswer into answer/ans/q_ans, ground into correct', () => {
+      // Default branch (subs 2, 3, 4, 5, 6, 7, 13, 22): answer/ans/
+      // q_ans take the question's raw `answer` field, correct[] takes
+      // the cleaned ground truth. We use distinct values here to
+      // prove the branching, not just symmetric data.
+      const { spy, last } = captureFormDataAppends();
+      buildSubmitPayload(
+        makeContext({
+          subcategoryId: 4,
+          draft: {
+            kind: 'speaking',
+            audioFilePath: '/tmp/x.m4a',
+            durationSec: 5,
+          },
+          rawAnswer: 'raw answer markup',
+          correctAnswer: 'cleaned ground truth',
+        }),
+      );
+      expect(last('answer[]')).toBe('raw answer markup');
+      expect(last('ans[]')).toBe('raw answer markup');
+      expect(last('q_ans[]')).toBe('raw answer markup');
+      expect(last('correct[]')).toBe('cleaned ground truth');
+      spy.mockRestore();
+    });
+  });
+
+  describe('getGroundTruth', () => {
+    it('returns empty string for null / undefined / non-object', () => {
+      expect(getGroundTruth(null)).toBe('');
+      expect(getGroundTruth(undefined)).toBe('');
+    });
+
+    it('extracts cAns span text from the answer field (single)', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 11,
+          answer: 'foo <span id="cAns">bar</span> baz',
+        }),
+      ).toBe('bar');
+    });
+
+    it('joins multiple cAns spans with commas', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 12,
+          answer:
+            "a <span id='cAns'>alpha</span> b <span id='cAns'>beta</span>",
+        }),
+      ).toBe('alpha,beta');
+    });
+
+    it('falls back to spans in the question field when answer has none', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 12,
+          answer: 'no spans here',
+          question: 'pick <span id="cAns">this</span>',
+        }),
+      ).toBe('this');
+    });
+
+    it('strips nested markup inside a cAns span', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 11,
+          answer: '<span id="cAns"><b>strong</b></span>',
+        }),
+      ).toBe('strong');
+    });
+
+    it('joins MCQ correct option IDs', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 8,
+          option: [
+            { id: 'a', correct: 0 },
+            { id: 'b', correct: 1 },
+            { id: 'c', correct: '1' },
+            { id: 'd', correct: 0 },
+          ],
+        }),
+      ).toBe('b,c');
+    });
+
+    it('falls back to `answer` field for MCQ when no option marked correct', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 14,
+          option: [{ id: 'a' }, { id: 'b' }],
+          answer: 'manual-fallback',
+        }),
+      ).toBe('manual-fallback');
+    });
+
+    it('sorts reorder options by index and joins IDs', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 10,
+          option: [
+            { id: '3', index: 3 },
+            { id: '1', index: 1 },
+            { id: '2', index: 2 },
+          ],
+        }),
+      ).toBe('1,2,3');
+    });
+
+    it('repeat sentence (sub 2) falls back to audio_script when answer is empty', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 2,
+          audio_script: 'the spoken sentence',
+        }),
+      ).toBe('the spoken sentence');
+    });
+
+    it('repeat sentence (sub 2) prefers answer over audio_script when present', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 2,
+          answer: 'manual answer',
+          audio_script: 'spoken',
+        }),
+      ).toBe('manual answer');
+    });
+
+    it('highlight (sub 19) extracts the words BEFORE each cAns span', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 19,
+          answer:
+            "stability <span id='cAns'>sustainability</span> word2 <span id='cAns'>another</span>",
+        }),
+      ).toBe('stability,word2');
+    });
+
+    it('default fallback returns the raw answer field', () => {
+      expect(
+        getGroundTruth({
+          subcategory_id: 7,
+          answer: 'free-form text',
+        }),
+      ).toBe('free-form text');
     });
   });
 
@@ -1052,6 +1455,55 @@ describe('MockTestRunner helpers', () => {
       };
       const result = normalizeQuestion(raw);
       expect(result?.raw).toBe(raw);
+    });
+
+    it('upgrades a bucket-relative media_link to an absolute audio URL', () => {
+      // Repeat Sentence (subcat 2) ships `media_link` as a relative
+      // path rooted at the shared S3 bucket. Native player needs an
+      // absolute URL — normalizer must prepend `mediaUrl`.
+      const result = normalizeQuestion({
+        id: 7475,
+        subcategory_id: 2,
+        media_link: '/ptedata/ptemedia/1195_1585472464.wav',
+      });
+      expect(result?.audioUrl).toBe(
+        'https://s3.ap-southeast-2.amazonaws.com/lamedia21/ptedata/ptemedia/1195_1585472464.wav',
+      );
+    });
+
+    it('upgrades a bare ptemedia filename to an absolute audio URL', () => {
+      const result = normalizeQuestion({
+        id: 1,
+        subcategory_id: 2,
+        media_link: '1195_1585472464.wav',
+      });
+      expect(result?.audioUrl).toBe(
+        'https://s3.ap-southeast-2.amazonaws.com/lamedia21/ptedata/ptemedia/1195_1585472464.wav',
+      );
+    });
+
+    it('routes describe-image media_link through the image resolver', () => {
+      // Describe Image (subcat 3) ships its image under `media_link`
+      // and the speaking component reads it from `audioUrl`. The
+      // normalizer must resolve it via `mediaUrl` (not the ptemedia
+      // audio path) so the image actually renders.
+      const result = normalizeQuestion({
+        id: 'q3',
+        subcategory_id: 3,
+        media_link: '/ptedata/pteimage/sample.png',
+      });
+      expect(result?.audioUrl).toBe(
+        'https://s3.ap-southeast-2.amazonaws.com/lamedia21/ptedata/pteimage/sample.png',
+      );
+    });
+
+    it('leaves absolute audio URLs untouched', () => {
+      const result = normalizeQuestion({
+        id: 'q1',
+        subcategory_id: 2,
+        media_link: 'https://cdn.example.com/audio.mp3',
+      });
+      expect(result?.audioUrl).toBe('https://cdn.example.com/audio.mp3');
     });
   });
 

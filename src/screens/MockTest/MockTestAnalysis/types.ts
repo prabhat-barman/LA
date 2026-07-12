@@ -79,5 +79,10 @@ export interface MockTestAnalysisRouteParams {
   mockId: number | string;
   variant: MockTestVariant;
   category: MockSection | 'Full Mock';
+  // Result-row id (outer MOCK_RESULT list `id`) the analysis endpoint
+  // needs in its URL. See `PastMock.resultId` for the full story.
+  // Optional so the post-finalize flow can navigate with mockId-only;
+  // useMockAnalysis resolves it via the past mocks list in that case.
+  resultId?: number | string;
   title?: string;
 }

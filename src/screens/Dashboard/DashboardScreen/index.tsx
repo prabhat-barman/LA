@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -41,6 +41,16 @@ import { useToast } from '../../../context/ToastContext';
 import { useUser } from '../../../context/UserContext';
 import { API_ENDPOINTS } from '../../../config/apiConfig';
 import apiClient from '../../../services/apiClient';
+import {
+  AnalyticsEvents,
+  trackEvent,
+  trackScreen,
+} from '../../../services/analytics';
+import { initializeNotifications } from '../../../services/notificationService';
+import {
+  markPopupVideoShownToday,
+  shouldShowPopupVideoToday,
+} from '../../../services/popupVideoStorage';
 import { SmartVideoPlayer } from '../../Videos/SmartVideoPlayer';
 import { FeedbackModal } from '../FeedbackModal';
 
@@ -56,7 +66,7 @@ import {
   getGreeting,
   getYoutubeVideoId,
 } from './helpers';
-import { FULLSCREEN_PLAYER_HEIGHT, scale } from './scale';
+import { FULLSCREEN_PLAYER_HEIGHT, scale, screenWidth } from './scale';
 import { styles } from './styles';
 import type {
   BreakdownMeta,
@@ -92,6 +102,13 @@ export const DashboardScreen = () => {
   const [activeVideo, setActiveVideo] = useState<DashboardVideoItem | null>(
     null,
   );
+  // Post-login YouTube welcome popup. Backend ships an id (or
+  // sometimes a full youtube URL) at
+  // `dashboardData.data.popup_video.youtube_vid`. Suppressed via a
+  // per-day AsyncStorage marker so the user sees the welcome video
+  // at most once per calendar day, even across cold starts.
+  const [popupVideoUrl, setPopupVideoUrl] = useState<string | null>(null);
+  const popupShownRef = useRef(false);
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
   const [examDatePickerVisible, setExamDatePickerVisible] = useState(false);
   const [examDateSaving, setExamDateSaving] = useState(false);
@@ -111,14 +128,58 @@ export const DashboardScreen = () => {
     }, [loadDashboardData]),
   );
 
+  // Boot platform notifications + an `app_open` analytics ping on
+  // first dashboard mount. `initializeNotifications()` is idempotent
+  // so re-running on subsequent Dashboard mounts is a no-op. We do
+  // it here (rather than in Splash) because the device-token sync
+  // endpoint needs an authenticated session, which is guaranteed by
+  // the time the user lands on Dashboard.
+  useEffect(() => {
+    initializeNotifications().catch(() => {});
+    trackScreen('Dashboard');
+    trackEvent(AnalyticsEvents.AppOpen);
+  }, []);
+
+  // App-launch welcome popup. Fires at most once per day when the
+  // dashboard payload carries a non-empty `popup_video.youtube_vid`.
+  // The `popupShownRef` guards against dashboard refetches (focus
+  // refresh) reopening the modal in the same session; the per-day
+  // AsyncStorage marker handles the same suppression across cold
+  // starts.
+  useEffect(() => {
+    if (popupShownRef.current) return;
+    const raw =
+      (dashboardData?.data?.popup_video?.youtube_vid as
+        | string
+        | undefined) ??
+      (dashboardData?.popup_video?.youtube_vid as string | undefined);
+    if (!raw) return;
+    (async () => {
+      const ok = await shouldShowPopupVideoToday();
+      if (!ok) return;
+      popupShownRef.current = true;
+      await markPopupVideoShownToday();
+      // Backend sometimes returns an id, sometimes a full URL —
+      // SmartVideoPlayer accepts either via its `videoUrl` prop
+      // (it has a youtube-id extractor), so normalise to a URL.
+      const url = /^https?:\/\//i.test(raw)
+        ? raw
+        : `https://www.youtube.com/watch?v=${raw}`;
+      setPopupVideoUrl(url);
+    })();
+  }, [dashboardData]);
+
   // ---- Handlers ----------------------------------------------------------
   const handleMicTest = useCallback(() => {
     navigation.navigate('MicrophoneSetup');
   }, [navigation]);
 
+  // Dashboard "Book Free Trial Class" CTA → opens the real form
+  // (BookTrialClassScreen) instead of the old throwaway toast. The
+  // form does its own success/error toast on submit.
   const handleBooking = useCallback(() => {
-    showToast('Class booked successfully!', 'success');
-  }, [showToast]);
+    navigation.navigate('BookTrialClass');
+  }, [navigation]);
 
   // Hand-off from dashboard CTAs (Today's Practice / Mock Test / category
   // cards) to the bottom tab navigator. The composite navigation prop
@@ -727,6 +788,35 @@ export const DashboardScreen = () => {
           >
             <ArrowLeftLineIcon size={scale(22)} />
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* --- Post-login YouTube popup (one-shot per sign-in) --- */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={popupVideoUrl !== null}
+        onRequestClose={() => setPopupVideoUrl(null)}
+      >
+        <View style={styles.popupVideoOverlay}>
+          <View style={styles.popupVideoCard}>
+            <TouchableOpacity
+              onPress={() => setPopupVideoUrl(null)}
+              style={styles.popupVideoCloseBtn}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
+              <Text style={styles.popupVideoCloseLabel}>{'\u2715'}</Text>
+            </TouchableOpacity>
+            {popupVideoUrl && (
+              <SmartVideoPlayer
+                key={popupVideoUrl}
+                videoUrl={popupVideoUrl}
+                thumbnailUrl={`https://img.youtube.com/vi/${getYoutubeVideoId(popupVideoUrl)}/hqdefault.jpg`}
+                height={Math.round((screenWidth - 40) * 0.56)}
+                onError={msg => showToast(msg, 'error')}
+              />
+            )}
+          </View>
         </View>
       </Modal>
     </View>

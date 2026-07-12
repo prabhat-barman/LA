@@ -11,6 +11,7 @@ const { width } = Dimensions.get('window');
 
 import { getItem } from '../../utils/secureStorage';
 import { logger } from '../../services/logger';
+import { hasSeenWalkthrough } from '../Walkthrough/WalkthroughScreen';
 
 const SplashScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -25,9 +26,14 @@ const SplashScreen = () => {
         const userToken = await getItem('user_token');
         if (userToken) {
           navigation.replace('Dashboard');
-        } else {
-          navigation.replace('Onboarding');
+          return;
         }
+        // No active session — show the first-launch walkthrough
+        // before sending the user to the Onboarding/SignIn flow. The
+        // walkthrough persists a "seen" flag in AsyncStorage so we
+        // skip it on every subsequent launch.
+        const seen = await hasSeenWalkthrough();
+        navigation.replace(seen ? 'Onboarding' : 'Walkthrough');
       } catch (error) {
         logger.warn('Session verification failed:', error);
         navigation.replace('Onboarding');

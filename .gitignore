@@ -29,6 +29,12 @@ android/local.properties
 .idea/
 *.iml
 
+# Firebase — config file is per-environment; CI injects it from a
+# GOOGLE_SERVICES_JSON base64 secret (see DISTRIBUTION.md).
+android/app/google-services.json
+firebase-debug.log
+firebase-debug.*.log
+
 # Environment files
 .env
 .env.local

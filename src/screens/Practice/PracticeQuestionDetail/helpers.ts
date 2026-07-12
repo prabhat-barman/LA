@@ -7,10 +7,15 @@ import {
 import { SubscoreChecklistIcon } from './icons';
 import type { AttemptLog, MCQOption, SortFilter } from './types';
 
-// MCQ categories. Reading: 8 (single) / 9 (multi). Listening: 14 / 15.
-// We expose both so the screen can opt in to extra categories later
-// without spreading literal numbers across the codebase.
-const MCQ_SINGLE_CATEGORIES = new Set<number>([8, 14]);
+// MCQ categories.
+//   Reading      : 8  (single)  / 9  (multi)
+//   Listening    : 14 (single)  / 15 (multi)
+//   Highlight    : 17 (single)  — "Highlight Correct Summary" — the
+//                  backend ships option rows; user picks ONE summary.
+//   Missing Word : 18 (single)  — option rows; user picks ONE word.
+// 17 and 18 use the same wire format as 8/14 (a single option id) so
+// reusing the MCQ UI keeps them on the cheap, well-tested code path.
+const MCQ_SINGLE_CATEGORIES = new Set<number>([8, 14, 17, 18]);
 const MCQ_MULTI_CATEGORIES = new Set<number>([9, 15]);
 
 export const isMcqSingleCategory = (categoryId: number): boolean =>
@@ -21,6 +26,38 @@ export const isMcqMultipleCategory = (categoryId: number): boolean =>
 
 export const isMcqCategory = (categoryId: number): boolean =>
   isMcqSingleCategory(categoryId) || isMcqMultipleCategory(categoryId);
+
+// Reading "Re-order Paragraphs" (10). Single-category check exposed so
+// the screen can branch on a name rather than a magic number.
+export const isReorderCategory = (categoryId: number): boolean =>
+  categoryId === 10;
+
+// Fill-in-the-blank variants (11 Reading bank, 12 R&W dropdown,
+// 16 Listening text input). Shared check for the screen-level
+// validation; the per-variant UI lives in the runner-bridge.
+const FIB_CATEGORIES = new Set<number>([11, 12, 16]);
+export const isFibCategory = (categoryId: number): boolean =>
+  FIB_CATEGORIES.has(categoryId);
+
+// Listening "Highlight Incorrect Words" (19) — user taps words in the
+// shown transcript that diverge from the spoken audio.
+export const isHighlightWordsCategory = (categoryId: number): boolean =>
+  categoryId === 19;
+
+// Listening "Write from Dictation" (20). Treated as a writing-style
+// answer (typed text), but distinguished here so the screen can show
+// the audio player + a single-line input instead of the essay textarea.
+export const isDictationCategory = (categoryId: number): boolean =>
+  categoryId === 20;
+
+// Convenience: the screen's "submit via the runner-bridge" set —
+// every category whose UI is rendered by `MockRunnerBridge` rather
+// than the legacy Practice question UIs. Keeps the call site
+// declarative.
+export const isRunnerBridgeCategory = (categoryId: number): boolean =>
+  isReorderCategory(categoryId) ||
+  isFibCategory(categoryId) ||
+  isHighlightWordsCategory(categoryId);
 
 // MCQ options ship in raw insertion order ("D", "C", "B", "A" in the
 // reference sample). Sort by the leading letter so the UI always
@@ -360,4 +397,105 @@ export const cleanHtmlText = (html: string): string => {
     .replace(/<[^>]+>/g, '')
     .trim()
     .replace(/\n{3,}/g, '\n\n');
+};
+
+// ─── MockRunnerBridge wire-format helpers ─────────────────────────────
+//
+// For the question categories Practice routes through
+// `MockRunnerBridge` (10, 11, 12, 16, 19) we still have to land a flat
+// `answer` string on the practice submit endpoint. Each kind has its
+// own legacy wire format — these helpers centralise that conversion
+// so the submit code stays readable.
+
+// Local shape of the runner's AnswerDraft (typed loosely on purpose
+// — the bridge always feeds us one of these shapes, but Practice
+// doesn't import the runner's discriminated union to avoid a cross-
+// module type coupling for non-runner consumers).
+type RunnerDraft =
+  | { kind: 'empty' }
+  | { kind: 'reorder'; orderedIds: string[] }
+  | { kind: 'fib-bank'; values: (string | null)[] }
+  | { kind: 'fib-dropdown'; values: (string | null)[] }
+  | { kind: 'fib-input'; values: string[] }
+  | { kind: 'highlight'; selectedIndices: number[]; selectedWords: string[] }
+  | { kind: string; [field: string]: unknown };
+
+// Wire format for FIB bank (11) and FIB dropdown (12) — backend wants
+// the leading-comma interleaved CSV (`,a,,b,,c`) so empty positions
+// are preserved as bare commas. Mirrors `buildInterleavedFibSelected`
+// in the runner; duplicated here to avoid a cross-module import.
+const buildInterleavedFibCsv = (
+  values: ReadonlyArray<string | null>,
+): string => {
+  if (values.length === 0) return '';
+  return values.map(v => v ?? '').join(',,');
+};
+
+// Convert a `RunnerDraft` into the `answer` string Practice's
+// SUBMIT_ANSWER endpoint expects. Returns `null` when the draft is
+// empty / cannot be serialised — callers use that as the "user
+// hasn't answered yet" signal.
+export const buildPracticeAnswerFromDraft = (
+  draft: RunnerDraft,
+): string | null => {
+  switch (draft.kind) {
+    case 'reorder': {
+      const d = draft as { orderedIds: string[] };
+      if (!Array.isArray(d.orderedIds) || d.orderedIds.length === 0) {
+        return null;
+      }
+      return d.orderedIds.join(',');
+    }
+    case 'fib-bank':
+    case 'fib-dropdown': {
+      const d = draft as { values: (string | null)[] };
+      if (!Array.isArray(d.values) || d.values.length === 0) return null;
+      // The interleaved form preserves blank positions, so even a
+      // partial answer is a meaningful submission. We only treat the
+      // draft as empty when every position is blank.
+      const allEmpty = d.values.every(v => v == null || String(v).length === 0);
+      if (allEmpty) return null;
+      return buildInterleavedFibCsv(d.values);
+    }
+    case 'fib-input': {
+      const d = draft as { values: string[] };
+      if (!Array.isArray(d.values) || d.values.length === 0) return null;
+      const allEmpty = d.values.every(v => !v || v.trim().length === 0);
+      if (allEmpty) return null;
+      // Listening FIB-input uses plain comma-join (no leading commas)
+      // — the backend differentiates 16 from 11/12 by `type`.
+      return d.values.map(v => v ?? '').join(',');
+    }
+    case 'highlight': {
+      const d = draft as { selectedWords: string[] };
+      if (!Array.isArray(d.selectedWords) || d.selectedWords.length === 0) {
+        return null;
+      }
+      return d.selectedWords.join(',');
+    }
+    case 'empty':
+    default:
+      return null;
+  }
+};
+
+// User-facing toast copy for "you didn't answer this question type
+// yet". Keeps the friendly per-kind copy in one place so the submit
+// path stays a one-liner.
+export const getMissingAnswerToast = (categoryId: number): string => {
+  switch (categoryId) {
+    case 10:
+      return 'Please re-order the paragraphs before submitting.';
+    case 11:
+    case 12:
+      return 'Please fill in every blank before submitting.';
+    case 16:
+      return 'Please type the missing words before submitting.';
+    case 19:
+      return 'Please tap the words that don\u2019t match the audio.';
+    case 20:
+      return 'Please type what you heard before submitting.';
+    default:
+      return 'Please answer the question before submitting.';
+  }
 };

@@ -116,6 +116,97 @@ describe('normalizeMockResult', () => {
     expect(result.title).toBe('My Mock Test');
   });
 
+  it('reads the legacy backend shape with nested com/enable blocks + user_data', () => {
+    // Real-world response shape (legacy ScoreCardScreen.js parity):
+    //   data.com.{speaking,writting,reading,listening}  → per-section
+    //   data.enable.{grammar,fluency,pronunciation,...} → enabling skills
+    //   data.total → overall headline
+    //   data.text  → score label
+    //   data.time  → submission timestamp
+    //   user_data  → candidate identity (peer of `data`, NOT inside)
+    const result = normalizeMockResult(
+      {
+        message: 'score generated successfully',
+        data: {
+          com: { listening: 17, reading: 14, writting: 10, speaking: 19 },
+          enable: {
+            discourse: 10,
+            vocab: 10,
+            spelling: 10,
+            pronunciation: 19,
+            fluency: 16,
+            grammar: 10,
+          },
+          total: 19,
+          time: '2026-06-03T09:56:58.000000Z',
+          text: 'Speaking Score',
+        },
+        user_data: {
+          first_name: 'Prabhat',
+          last_name: 'Barman',
+          email: 'prabhat@example.com',
+          image: '/storage/profile/avatar.jpg',
+          country_residence: 'India',
+          country_citizenship: 'null', // ← literal string "null" should be dropped
+        },
+      },
+      ctx,
+    );
+
+    expect(result.overall).toBe(19);
+    expect(result.scoreLabel).toBe('Speaking Score');
+    expect(result.submittedAtIso).toBe('2026-06-03T09:56:58.000Z');
+    // Section scores read from `data.com` — note `writting` typo
+    // must resolve to the Writing section.
+    expect(result.sections).toEqual(
+      expect.arrayContaining([
+        { section: 'Speaking', score: 19, rawPercentage: undefined },
+        { section: 'Writing', score: 10, rawPercentage: undefined },
+        { section: 'Reading', score: 14, rawPercentage: undefined },
+        { section: 'Listening', score: 17, rawPercentage: undefined },
+      ]),
+    );
+    // Enabling skills read from `data.enable`.
+    expect(result.enablingSkills).toEqual([
+      { name: 'Grammar', score: 10 },
+      { name: 'Oral Fluency', score: 16 },
+      { name: 'Pronunciation', score: 19 },
+      { name: 'Spelling', score: 10 },
+      { name: 'Vocabulary', score: 10 },
+      { name: 'Written Discourse', score: 10 },
+    ]);
+    expect(result.userInfo.firstName).toBe('Prabhat');
+    expect(result.userInfo.lastName).toBe('Barman');
+    expect(result.userInfo.email).toBe('prabhat@example.com');
+    expect(result.userInfo.countryResidence).toBe('India');
+    // Literal "null" string must be filtered out (mirrors legacy
+    // formatUserName) so the UI doesn't render "null" verbatim.
+    expect(result.userInfo.countryCitizenship).toBeNull();
+    // Image path should be resolved to an absolute URL.
+    expect(result.userInfo.imageUrl).toContain('/storage/profile/avatar.jpg');
+  });
+
+  it('uses scoreLabel default when backend omits data.text', () => {
+    const result = normalizeMockResult(
+      { data: { total: 65 } },
+      { mockId: 1, variant: 'full', category: 'Reading' },
+    );
+    expect(result.scoreLabel).toBe('Reading Score');
+  });
+
+  it('returns an empty userInfo when payload has no user_data block', () => {
+    const result = normalizeMockResult({ data: { total: 50 } }, ctx);
+    expect(result.userInfo).toEqual({
+      firstName: null,
+      lastName: null,
+      imageUrl: null,
+      email: null,
+      dob: null,
+      countryResidence: null,
+      countryCitizenship: null,
+    });
+  });
+
   it('unwraps a common { result: { ... } } envelope', () => {
     const result = normalizeMockResult(
       {
@@ -419,6 +510,76 @@ describe('normalizePastMock', () => {
     const raw = { mock_id: 1, custom_field: 'xyz' };
     const result = normalizePastMock(raw, fullCtx);
     expect(result?.raw).toBe(raw);
+  });
+
+  it('extracts resultId from the outer row id, never from nested mock.id', () => {
+    // CRITICAL parity check: MOCK_SCORE / MOCK_ANALYSIS endpoints
+    // expect the user-attempt row id (legacy `item.id`) in the URL,
+    // NOT the mock master id (`item.mock.id`). Calling them with
+    // the master id makes the PHP backend throw an NPE.
+    const result = normalizePastMock(
+      {
+        id: 9876, // ← result row id (user_mock_attempt PK)
+        mock: { id: 42, category: 'Speaking' }, // ← mock master id
+      },
+      fullCtx,
+    );
+    expect(result?.resultId).toBe(9876);
+    expect(result?.mockId).toBe(42);
+  });
+
+  it('prefers explicit result_id over the generic outer id', () => {
+    // Some backends ship both — favour the typed alias so we hit
+    // the right column when the table denormalises the id.
+    const result = normalizePastMock(
+      {
+        id: 1000,
+        result_id: 2000,
+        mock: { id: 50, category: 'Reading' },
+      },
+      fullCtx,
+    );
+    expect(result?.resultId).toBe(2000);
+    expect(result?.mockId).toBe(50);
+  });
+
+  it('falls back to mockId for resultId when payload lacks a row id', () => {
+    // Legacy/dummy fixtures sometimes only carry the mock master id.
+    // Mirror it into resultId so the screen still has *something*
+    // to fetch with — tests fail loudly otherwise.
+    const result = normalizePastMock(
+      { mock_id: 33, category: 'Writing' },
+      fullCtx,
+    );
+    expect(result?.resultId).toBe(33);
+    expect(result?.mockId).toBe(33);
+  });
+
+  it('parses nested mock object and category object correctly', () => {
+    const raw = {
+      id: 501,
+      overall_score: 75,
+      submitted_at: '2026-06-03T10:00:00Z',
+      mock: {
+        id: 77,
+        title: 'Past Mock Test',
+        category: { id: 1 },
+      },
+    };
+    const result = normalizePastMock(raw, fullCtx);
+    expect(result).toEqual({
+      resultId: 501,
+      mockId: 77,
+      variant: 'full',
+      category: 'Speaking',
+      title: 'Past Mock Test',
+      overall: 75,
+      submittedAtIso: '2026-06-03T10:00:00.000Z',
+      sectionScores: {
+        Speaking: 75,
+      },
+      raw,
+    });
   });
 
   describe('sectionScores (Phase 6.1)', () => {

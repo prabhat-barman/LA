@@ -2,6 +2,7 @@ import { dedupePastMocks } from './usePastMocks';
 import type { PastMock } from '../types';
 
 const mock = (overrides: Partial<PastMock>): PastMock => ({
+  resultId: overrides.resultId ?? overrides.mockId ?? 1,
   mockId: overrides.mockId ?? 1,
   variant: overrides.variant ?? 'full',
   category: overrides.category ?? 'Full Mock',

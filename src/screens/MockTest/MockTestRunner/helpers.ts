@@ -1,3 +1,4 @@
+import { resolveAudioUrl, resolveImageUrl } from '../../../utils/mediaUrls';
 import {
   DEFAULT_SECTION_DURATION_SEC,
   SUBCATEGORY_TO_ANSWER_KIND,
@@ -485,11 +486,35 @@ export const normalizeQuestion = (raw: unknown): Question | null => {
     title: pickString(r, 'title', 'q_title', 'question_title', 'name'),
     prompt: pickString(r, 'question', 'question_mcq', 'mcq_question', 'q_text'),
     paragraph: pickString(r, 'paragraph', 'text', 'q_text'),
-    // Media URL resolution is intentionally deferred to component time
-    // (where we know the question kind and the right base path) —
-    // we just pass through whatever the backend gave us as-is.
-    imageUrl: pickString(r, 'image_link', 'q_image', 'question_image', 'image_file'),
-    audioUrl: pickString(r, 'audio_file', 'q_audio', 'question_audio', 'media_link', 'audio'),
+    // Backend ships a confusing mix of absolute URLs, bucket-relative
+    // paths (`/ptedata/ptemedia/x.wav`), and bare filenames. Native
+    // <Image> and the audio player only accept absolute URIs, so we
+    // resolve once here — keeping components agnostic of the various
+    // S3 / API host conventions. `resolveAudioUrl` returns '' when the
+    // input is empty, which we coerce back to `undefined` so the
+    // `Question` contract (optional, never empty-string) stays clean.
+    //
+    // Describe Image (subcategory 3) ships its image under `media_link`
+    // and `SpeakingQuestion` uses `audioUrl` as the image source — so
+    // we route the audio slot through the *image* resolver in that one
+    // case to avoid mis-classifying an image as a ptemedia audio file.
+    imageUrl:
+      resolveImageUrl(
+        pickString(r, 'image_link', 'q_image', 'question_image', 'image_file'),
+      ) || undefined,
+    audioUrl: (() => {
+      const raw = pickString(
+        r,
+        'audio_file',
+        'q_audio',
+        'question_audio',
+        'media_link',
+        'audio',
+      );
+      const resolved =
+        subcategory_id === 3 ? resolveImageUrl(raw) : resolveAudioUrl(raw);
+      return resolved || undefined;
+    })(),
     options: Array.isArray(r.option)
       ? (r.option as unknown[]).flatMap(o => {
           if (!o || typeof o !== 'object') return [];
@@ -668,12 +693,17 @@ export const normalizePendingMock = (
   if (!rawEntry || typeof rawEntry !== 'object') return null;
   const r = rawEntry as Record<string, unknown>;
 
+  const nestedMock =
+    r.mock && typeof r.mock === 'object' && !Array.isArray(r.mock)
+      ? (r.mock as Record<string, unknown>)
+      : null;
+
   // Mock id is the only truly required field — without it we can't
   // navigate into the runner. Accept any of the common aliases as a
-  // non-empty string or a finite number. We deliberately allow
-  // non-numeric string ids (e.g. `'abc-123'`) since the runner's
-  // `MockTestRunnerRouteParams.mockId` is `number | string`.
-  const mockIdRaw = r.mock_id ?? r.mockId ?? r.id ?? r.mock;
+  // non-empty string or a finite number. We check the nested mock first if present.
+  const mockIdRaw = nestedMock
+    ? (nestedMock.id ?? nestedMock.mock_id ?? nestedMock.mockId ?? r.mock_id ?? r.mockId ?? r.id)
+    : (r.mock_id ?? r.mockId ?? r.id ?? r.mock);
   let mockId: number | string;
   if (typeof mockIdRaw === 'number' && Number.isFinite(mockIdRaw)) {
     mockId = mockIdRaw;
@@ -685,11 +715,17 @@ export const normalizePendingMock = (
 
   // Resolve category. Backend may ship as numeric code or label.
   let category: MockSection | 'Full Mock' = 'Full Mock';
-  const catCode = Number(r.category);
+  const rawCategory = nestedMock ? (nestedMock.category ?? r.category) : r.category;
+  const categoryVal =
+    rawCategory && typeof rawCategory === 'object' && !Array.isArray(rawCategory)
+      ? (rawCategory as Record<string, unknown>).id ?? (rawCategory as Record<string, unknown>).category_id ?? rawCategory
+      : rawCategory;
+
+  const catCode = Number(categoryVal);
   if (Number.isFinite(catCode) && CATEGORY_CODE_TO_LABEL[catCode]) {
     category = CATEGORY_CODE_TO_LABEL[catCode];
-  } else if (typeof r.category === 'string') {
-    const labeled = r.category.trim();
+  } else if (typeof categoryVal === 'string') {
+    const labeled = categoryVal.trim();
     if (
       labeled === 'Speaking' ||
       labeled === 'Writing' ||
@@ -704,8 +740,12 @@ export const normalizePendingMock = (
   // Current question. Backend uses `curr_q` (0-based) or
   // `current_question` (1-based). Collapse to 0-based — the runner's
   // `currentIndex` is 0-based and we want a single contract there.
-  const currZeroBased = pickPositiveInt(r, 'curr_q');
-  const currOneBased = pickPositiveInt(r, 'current_question', 'question_number');
+  const currZeroBased =
+    pickPositiveInt(r, 'curr_q') ??
+    (nestedMock ? pickPositiveInt(nestedMock, 'curr_q') : undefined);
+  const currOneBased =
+    pickPositiveInt(r, 'current_question', 'question_number') ??
+    (nestedMock ? pickPositiveInt(nestedMock, 'current_question', 'question_number') : undefined);
   const startQuestionIndex =
     currZeroBased !== undefined
       ? currZeroBased
@@ -719,12 +759,16 @@ export const normalizePendingMock = (
   // zero/null, which is the right behaviour for a paused-with-no-
   // time-info attempt.
   const remainingSecondsTotal =
-    pickPositiveInt(r, 'time', 'remaining_time', 'time_left', 'time_remaining') ??
+    pickPositiveInt(r, 'time', 'remaining_time', 'time_left', 'time_remaining', 'total_remaining_time') ??
+    (nestedMock ? pickPositiveInt(nestedMock, 'time', 'remaining_time', 'time_left', 'time_remaining', 'total_remaining_time') : null) ??
     0;
 
-  const totalQuestions = pickPositiveInt(r, 'q_count', 'total_questions', 'question_count');
+  const totalQuestions =
+    (nestedMock ? pickPositiveInt(nestedMock, 'q_count', 'total_questions', 'question_count', 'question_total') : null) ??
+    pickPositiveInt(r, 'q_count', 'total_questions', 'question_count', 'question_total');
 
   const title =
+    (nestedMock ? pickString(nestedMock, 'title', 'mock_name', 'name', 'mock_title') : null) ??
     pickString(r, 'title', 'mock_name', 'name', 'mock_title') ??
     `Mock #${mockId}`;
 
@@ -738,6 +782,144 @@ export const normalizePendingMock = (
     totalQuestions,
     raw: rawEntry,
   };
+};
+
+// Subcategories grouped by how the backend wants `answer[]` /
+// `ans[]` / `q_ans[]` / `correct[]` populated. Pulled verbatim from
+// the legacy NormalMockTestScreen mapping (lines 858-886) so the
+// wire payload matches the PHP controller's expectations.
+//
+//   GROUND_TRUTH_ECHO — all four fields = derived ground truth
+//     (MCQ, reorder, fill-in-the-blanks, dictation, etc.)
+//   GROUND_TRUTH_NULL_ANSWER — answer[]=null, others = ground truth
+//     (Read Aloud (1) + Highlight Text 21 — these have no
+//      user-supplied option; the backend doesn't expect `answer[]`)
+//   HIGHLIGHT (19) — special case in builder body
+//   default — fields take the question's raw `answer` field
+//     (Repeat Sentence, Retell Lecture, etc.)
+const GROUND_TRUTH_ECHO_SUBS: ReadonlySet<SubcategoryId> = new Set<SubcategoryId>([
+  8, 9, 10, 11, 12, 14, 15, 16, 17, 18, 20,
+]);
+const GROUND_TRUTH_NULL_ANSWER_SUBS: ReadonlySet<SubcategoryId> = new Set<SubcategoryId>([
+  1, 21,
+]);
+
+// Speaking subcategories — used to gate which answer-shape fields
+// get nulled vs populated. Mirrors `AUDIO_ONLY_SUBCATEGORIES` in
+// SpeakingQuestion but for ALL speaking kinds (1..5 + 21, 22).
+const SPEAKING_SUBS: ReadonlySet<SubcategoryId> = new Set<SubcategoryId>([
+  1, 2, 3, 4, 5, 21, 22,
+]);
+
+// Extracts `<span id='cAns'>…</span>` matches from an HTML blob, used
+// for the legacy ground-truth recovery path. The cleaned inner text
+// (stripped of nested markup) is what the backend wants in `correct[]`.
+const extractCAnsSpans = (html: string | null | undefined): string[] => {
+  if (!html) return [];
+  const regex = /<span id=['"]?cAns['"]?>([\s\S]*?)<\/span>/gi;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(html)) !== null) {
+    const stripped = m[1].replace(/<[^>]*>/g, '').trim();
+    if (stripped) out.push(stripped);
+  }
+  return out;
+};
+
+// Computes the "ground truth" string the backend wants in `correct[]`
+// (and, for most subs, in the sibling `answer[] / ans[] / q_ans[]`
+// fields too). Mirrors legacy `getGroundTruth` from
+// NormalMockTestScreen.js / FullMockTestScreen.js / ExtensiveMockTestScreen.js
+// — the four files all duplicate the same logic, so we collapse it
+// here once and unit-test it.
+//
+//   - Primary: pull text out of `<span id='cAns'>` tags inside the
+//     question's `answer` field, or the question text itself as a
+//     fallback. Comma-join when multiple spans match.
+//   - MCQ subs (8, 9, 14, 15, 17, 18): join correct option IDs.
+//   - Reorder (10): sort options by `index` and join IDs.
+//   - Listening/Speaking comprehension (2, 5): fall back to
+//     `answer || audio_script`.
+//   - Highlight (19): comma-join the words preceding each `<span>`.
+//   - Default: raw `answer` field.
+//
+// Exported so the SUBMIT_MOCK payload builder + tests share the same
+// implementation.
+export const getGroundTruth = (
+  raw: Record<string, unknown> | null | undefined,
+): string => {
+  if (!raw) return '';
+  const subIdRaw = raw.subcategory_id;
+  const subId = Number(subIdRaw);
+  const answerStr = typeof raw.answer === 'string' ? raw.answer : '';
+  const questionStr = typeof raw.question === 'string' ? raw.question : '';
+  const audioScriptStr =
+    typeof raw.audio_script === 'string' ? raw.audio_script : '';
+
+  // 1. Primary <span id='cAns'> extraction — same for most subs
+  // EXCEPT highlight (19), which needs the words BEFORE each span.
+  const spansFromAnswer = extractCAnsSpans(answerStr);
+  const spansFromQuestion = extractCAnsSpans(questionStr);
+  const detected =
+    spansFromAnswer.length > 0 ? spansFromAnswer : spansFromQuestion;
+  if (detected.length > 0 && subId !== 19) {
+    return detected.join(',');
+  }
+
+  // 2. MCQ — join correct option IDs.
+  if ([8, 9, 14, 15, 17, 18].includes(subId)) {
+    const options = Array.isArray(raw.option) ? (raw.option as unknown[]) : [];
+    const ids = options
+      .filter(
+        (o): o is { id?: unknown; correct?: unknown; options?: unknown } =>
+          typeof o === 'object' && o !== null,
+      )
+      .filter(o => o.correct === 1 || o.correct === '1')
+      .map(o => {
+        if (typeof o.id === 'string' || typeof o.id === 'number') {
+          return String(o.id);
+        }
+        return typeof o.options === 'string' ? o.options : '';
+      })
+      .filter(s => s.length > 0);
+    return ids.length > 0 ? ids.join(',') : answerStr;
+  }
+
+  // 3. Reorder paragraphs — sort by `index` and join IDs.
+  if (subId === 10) {
+    const options = Array.isArray(raw.option) ? (raw.option as unknown[]) : [];
+    const sorted = options
+      .filter(
+        (o): o is { id?: unknown; index?: unknown } =>
+          typeof o === 'object' && o !== null,
+      )
+      .slice()
+      .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0))
+      .map(o => (o.id !== undefined ? String(o.id) : ''))
+      .filter(s => s.length > 0);
+    return sorted.join(',');
+  }
+
+  // 4. Repeat Sentence (2) & ASQ (5) — fall back to audio_script.
+  if (subId === 2 || subId === 5) {
+    return answerStr || audioScriptStr || '';
+  }
+
+  // 5. Highlight Incorrect Words (19) — comma-join the words RIGHT
+  // BEFORE each `<span id='cAns'>` opening tag.
+  if (subId === 19) {
+    const regex = /([^\s<]+)\s*(?=<span id=['"]?cAns['"]?>)/gi;
+    const incorrect: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(answerStr)) !== null) {
+      const tok = match[1]?.trim();
+      if (tok) incorrect.push(tok);
+    }
+    return incorrect.join(',') || answerStr;
+  }
+
+  // 6. Default — raw answer field (writing, dictation, etc.).
+  return answerStr;
 };
 
 // Builds the multipart FormData for `SUBMIT_MOCK`. Field shape follows
@@ -758,98 +940,260 @@ export const buildSubmitPayload = (ctx: SubmitContext): FormData => {
     secondsSpentOnQuestion,
     remainingTotalSeconds,
     audioScript,
+    questionText,
     correctAnswer,
+    rawAnswer,
     htmlAnswer,
-    isPending,
     isComplete,
     platform,
+    variant,
+    category,
+    currentSectionIndex,
   } = ctx;
   const { mockId, questionId, subcategoryId, draft } = answer;
 
+  const isSpeaking = SPEAKING_SUBS.has(subcategoryId);
+
+  // `appendNull` writes the literal null sentinel that the legacy
+  // mobile app sends for "empty" fields. RN's FormData stores the
+  // raw value in `_parts` and the network layer stringifies it to
+  // the string "null" on the wire — which is exactly what the PHP
+  // controller's switch arms expect ("" makes some arms behave like
+  // a real user answer). Centralising this here makes the legacy-
+  // parity intent explicit at the call site.
+  const appendNull = (name: string): void => {
+    fd.append(name, null as unknown as string);
+  };
+
+  const isFullMock = variant === 'full' && category === 'Full Mock';
+  const isExtensive = variant === 'extensive';
+
   // ── Scalar test-state metadata ────────────────────────────────────
-  fd.append('mock_id', String(mockId));
-  fd.append('q_count', String(totalQuestions));
-  fd.append('q_time', String(Math.max(0, Math.floor(secondsSpentOnQuestion))));
-  fd.append('time', String(Math.max(0, Math.floor(remainingTotalSeconds))));
-  fd.append('pending', isPending ? '1' : '0');
-  fd.append('complete', isComplete ? '1' : '0');
-  fd.append('skip', '0');
-  fd.append('audio_text', '');
+  fd.append('mock_id', mockId as any);
+  fd.append('q_count', totalQuestions as any);
+  fd.append('q_time', Math.max(0, Math.floor(secondsSpentOnQuestion)) as any);
+  fd.append('time', Math.max(0, Math.floor(remainingTotalSeconds)) as any);
+  
+  // Legacy parity: mapping the exact fields and types from legacy mock screens
+  // pending: Extensive is dynamic (isPending ? 1 : 0), others are hardcoded 1
+  const pendingVal = isExtensive ? (ctx.isPending ? 1 : 0) : 1;
+  fd.append('pending', pendingVal as any);
+
+  // complete: Full Mock is 1 only when completing Section 3, others are isComplete ? 1 : 0
+  const completeVal = isFullMock
+    ? (isComplete && currentSectionIndex === 2 ? 1 : 0)
+    : (isComplete ? 1 : 0);
+  fd.append('complete', completeVal as any);
+
+  // skip: Full Mock sends section number (isFrom) when section completes. Extensive sends 0. Normal omits it.
+  if (isFullMock) {
+    if (isComplete) {
+      const isFrom = currentSectionIndex + 1;
+      const skipVal = isFrom > 2 ? 2 : isFrom;
+      fd.append('skip', skipVal as any);
+    }
+  } else if (isExtensive) {
+    fd.append('skip', 0 as any);
+  }
+
+  appendNull('audio_text');
   fd.append('device', 'mobile');
   fd.append('isPlatform', platform);
-  fd.append('question_number', String(questionNumber));
-  // `curr_q` is 0 on the very final submission, otherwise the current
-  // question index — backend uses this to advance / mark completion.
-  fd.append('curr_q', isComplete ? '0' : String(questionNumber));
+  fd.append('question_number', questionNumber as any);
+  
+  // `curr_q` is 0 on the very final submission, otherwise the current question number
+  fd.append('curr_q', (isComplete ? 0 : questionNumber) as any);
 
   // ── Array fields (PHP `[]` notation) ──────────────────────────────
-  fd.append('id[]', String(questionId));
-  fd.append('type[]', String(subcategoryId));
-  fd.append('response[]', 'true');
-  // Backend wants the question's audio_script (or null) echoed in
-  // `script[]`; empty string when the question isn't audio-bearing.
-  fd.append('script[]', audioScript ?? '');
-  // `lang[]` is unused on the wire today but the backend's parser
-  // still expects the key — empty string keeps it happy.
-  fd.append('lang[]', '');
+  fd.append('id[]', questionId as any);
+  fd.append('type[]', subcategoryId as any);
+  fd.append('response[]', true as any);
 
-  // Ground-truth echo. Backend duplicates the same value into four
-  // legacy fields; we mirror that rather than fight it.
-  const correct = correctAnswer ?? '';
-  fd.append('answer[]', correct);
-  fd.append('ans[]', correct);
-  fd.append('q_ans[]', correct);
-  fd.append('correct[]', correct);
+  // `script[]`: Read Aloud (subcategory 1) has no audio prompt —
+  // legacy sends `null` explicitly there. Every other subcategory
+  // echoes the question's `audio_script` (or null if absent).
+  if (subcategoryId === 1) {
+    appendNull('script[]');
+  } else {
+    if (audioScript == null) {
+      appendNull('script[]');
+    } else {
+      fd.append('script[]', audioScript);
+    }
+  }
+  // `lang[]` is unused on the wire today — legacy sends null for
+  // every submission.
+  appendNull('lang[]');
+  // `text[]` is the question prompt text; backend logs it verbatim
+  // and 500s on missing key.
+  fd.append('text[]', questionText ?? '');
+
+  // ── Strategy (Read Aloud only) ────────────────────────────────────
+  // Subcategory 1 has a "Normal" vs "One Line Strategy" toggle in
+  // the legacy app, posted as `strategy` = "1" or "2". We don't
+  // surface a strategy picker yet, so default to "1" (Normal) —
+  // backend treats the field as required for sub 1.
+  if (subcategoryId === 1) {
+    fd.append('strategy', '1');
+  }
+
+  // ── Ground-truth echo ─────────────────────────────────────────────
+  // Per-subcategory mapping pulled from legacy
+  // NormalMockTestScreen.js:858-886 (mirrored across all three mock
+  // screens). Three flavours:
+  //   - Highlight (19): answer/correct = ground truth, ans/q_ans =
+  //     the raw markup off the question payload.
+  //   - GROUND_TRUTH_ECHO_SUBS: all four fields = ground truth.
+  //   - GROUND_TRUTH_NULL_ANSWER_SUBS (1, 21): answer = null,
+  //     others = ground truth.
+  //   - default: answer/ans/q_ans = raw answer, correct = ground truth.
+  const ground = correctAnswer ?? '';
+  const rawAns = rawAnswer ?? '';
+  const appendStringOrNull = (name: string, value: string): void => {
+    if (value === '') appendNull(name);
+    else fd.append(name, value);
+  };
+  if (subcategoryId === 19) {
+    appendStringOrNull('answer[]', ground);
+    appendStringOrNull('correct[]', ground);
+    appendStringOrNull('ans[]', rawAns);
+    appendStringOrNull('q_ans[]', rawAns);
+  } else if (GROUND_TRUTH_ECHO_SUBS.has(subcategoryId)) {
+    appendStringOrNull('answer[]', ground);
+    appendStringOrNull('ans[]', ground);
+    appendStringOrNull('q_ans[]', ground);
+    appendStringOrNull('correct[]', ground);
+  } else if (GROUND_TRUTH_NULL_ANSWER_SUBS.has(subcategoryId)) {
+    appendNull('answer[]');
+    appendStringOrNull('ans[]', ground);
+    appendStringOrNull('q_ans[]', ground);
+    appendStringOrNull('correct[]', ground);
+  } else {
+    appendStringOrNull('answer[]', rawAns);
+    appendStringOrNull('ans[]', rawAns);
+    appendStringOrNull('q_ans[]', rawAns);
+    appendStringOrNull('correct[]', ground);
+  }
 
   // ── User answer fields ────────────────────────────────────────────
-  // Per-kind wire-format override: subs 11 (bank) and 12 (dropdown)
-  // both want the leading-comma interleaved form (`,a,,b,,c`) on
-  // `selected[]`, and the same string mirrored into `text_answer[]`.
-  // Everything else uses the generic `buildSelectedString` shape.
-  let selected = buildSelectedString(draft) ?? '';
-  if (draft.kind === 'fib-bank' || draft.kind === 'fib-dropdown') {
-    selected = buildInterleavedFibSelected(draft.values);
-  }
-  fd.append('selected[]', selected);
-
-  if (draft.kind === 'writing') {
-    fd.append('text_answer[]', draft.text);
-    fd.append('length[]', String(countWords(draft.text)));
-  } else if (
-    draft.kind === 'fib-bank' ||
-    draft.kind === 'fib-dropdown' ||
-    draft.kind === 'fib-input'
-  ) {
-    // Reference parity: every FIB variant mirrors `selected` into
-    // `text_answer[]` (the legacy PHP parser reads both fields and
-    // the variants differ only in `selected`'s already-applied
-    // interleave). `length[]` stays empty — only writing tracks
-    // word count.
-    fd.append('text_answer[]', selected);
-    fd.append('length[]', '');
+  // Speaking kinds never populate `selected[]` / `text_answer[]` /
+  // `length[]` — the user's "answer" is the audio blob in `file[]`.
+  // Legacy explicitly nulls these three for every speaking submission.
+  if (isSpeaking) {
+    appendNull('selected[]');
+    appendNull('text_answer[]');
+    appendNull('length[]');
   } else {
-    fd.append('text_answer[]', '');
-    fd.append('length[]', '');
+    // Per-kind wire-format override: subs 11 (bank) and 12
+    // (dropdown) both want the leading-comma interleaved form
+    // (`,a,,b,,c`) on `selected[]`. Everything else uses the
+    // generic `buildSelectedString` shape.
+    let selected = buildSelectedString(draft) ?? '';
+    if (draft.kind === 'fib-bank' || draft.kind === 'fib-dropdown') {
+      selected = buildInterleavedFibSelected(draft.values);
+    }
+    appendStringOrNull('selected[]', selected);
+
+    if (draft.kind === 'writing') {
+      fd.append('text_answer[]', draft.text);
+      fd.append('length[]', countWords(draft.text) as any);
+    } else if (
+      draft.kind === 'fib-bank' ||
+      draft.kind === 'fib-dropdown' ||
+      draft.kind === 'fib-input'
+    ) {
+      appendStringOrNull('text_answer[]', selected);
+      appendNull('length[]');
+    } else {
+      appendNull('text_answer[]');
+      appendNull('length[]');
+    }
   }
 
-  if (draft.kind === 'speaking') {
+  // ── file[] + duration[] ───────────────────────────────────────────
+  // Legacy parity: when a recording was captured, ship the blob with
+  // platform-specific MIME + extension (iOS = m4a / audio/m4a,
+  // Android = mp4 / audio/mp4). When no recording, ship `null` —
+  // the legacy PHP controller distinguishes a null `file[]` (skipped
+  // audio) from an empty string (which trips the `foreach()` arm).
+  // The `<question_id>.<ext>` filename matches the legacy convention
+  // so the backend's S3 uploader writes objects with consistent keys.
+  if (
+    draft.kind === 'speaking' &&
+    draft.audioFilePath &&
+    draft.durationSec > 0
+  ) {
+    const isIos = platform === 'ios';
+    let fileUri = draft.audioFilePath;
+    if (!isIos) {
+      const cleanPath = fileUri.replace(/^file:\/\//, '').replace(/^\/+/, '');
+      fileUri = `file:///${cleanPath}`;
+    }
     fd.append('file[]', {
-      // RN's FormData accepts this (uri, name, type) tuple shape at
-      // runtime; the type assertion silences the DOM-typed mismatch.
-      uri: draft.audioFilePath,
-      name: `answer-${questionId}.m4a`,
-      type: 'audio/m4a',
+      uri: fileUri,
+      type: isIos ? 'audio/m4a' : 'audio/mp4',
+      name: `${questionId}.${isIos ? 'm4a' : 'mp4'}`,
     } as unknown as Blob);
     fd.append('duration[]', formatDurationMMSS(draft.durationSec));
   } else {
-    fd.append('duration[]', '');
+    appendNull('file[]');
+    // Legacy ships `duration[]` as `recordTime || "00:00"` —
+    // always a MM:SS string even when there's no recording.
+    fd.append('duration[]', '00:00');
   }
 
   // `html[]` is only meaningful for word-highlight (subcategory 19).
-  // Always append the key so the parser doesn't 400.
-  fd.append('html[]', htmlAnswer ?? '');
+  // Legacy ships it as `html || null` — null when the user didn't
+  // produce a highlight markup. We mirror that.
+  if (htmlAnswer && htmlAnswer.length > 0) {
+    fd.append('html[]', htmlAnswer);
+  } else {
+    appendNull('html[]');
+  }
 
   return fd;
+};
+
+// Debug helper: prints every field of a SUBMIT_MOCK FormData to the
+// logger in a curl-friendly shape. Useful when the browser/devtools
+// can't preview the payload (binary file blob makes the request
+// body "[Preview unavailable]") and we need to confirm what actually
+// went over the wire.
+//
+// On React Native, the standard `FormData` instance exposes its
+// internals via the non-standard `_parts` array: each entry is a
+// `[name, value]` tuple where `value` is either a scalar or a
+// `{ uri, name, type }` blob descriptor. We read that directly
+// (with a defensive fallback to `entries()` on platforms that ever
+// add it) so this helper works in both RN and Node-based jest tests.
+export const dumpSubmitFormData = (fd: FormData): Array<{
+  name: string;
+  value: string;
+}> => {
+  const rows: Array<{ name: string; value: string }> = [];
+  const parts = (fd as unknown as { _parts?: Array<[string, unknown]> })._parts;
+  const stringify = (v: unknown): string => {
+    if (v === null || v === undefined) return '<null>';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'object') {
+      const o = v as { uri?: unknown; name?: unknown; type?: unknown };
+      if (typeof o.uri === 'string') {
+        return `<file uri=${o.uri} name=${String(o.name ?? '')} type=${String(o.type ?? '')}>`;
+      }
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return '<unserializable>';
+      }
+    }
+    return String(v);
+  };
+  if (Array.isArray(parts)) {
+    for (const [name, value] of parts) {
+      rows.push({ name, value: stringify(value) });
+    }
+  }
+  return rows;
 };
 
 // ─── Bulk skip-remaining + final close payloads ─────────────────────────────

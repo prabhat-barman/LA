@@ -284,6 +284,30 @@ export const styles = StyleSheet.create({
     color: '#1C1F2A',
     lineHeight: scale(24),
   },
+
+  // ── MockRunnerBridge ───────────────────────────────────────────────
+  // Wraps the runner-question components so they get a bit of breathing
+  // room inside the Practice card. The runner components manage their
+  // own internal padding, so we only need outer margin here.
+  runnerBridgeContainer: {
+    marginTop: scale(6),
+    marginBottom: scale(12),
+  },
+  runnerBridgePlaceholder: {
+    padding: scale(20),
+    backgroundColor: '#F8F9FA',
+    borderRadius: scale(10),
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    marginVertical: scale(12),
+  },
+  runnerBridgePlaceholderText: {
+    fontSize: scale(13),
+    color: '#48484A',
+    fontFamily: 'BricolageGrotesque-Regular',
+    lineHeight: scale(18),
+    textAlign: 'center',
+  },
   // Outline buttons for translation/transcript/sample
   cardActionsRow: {
     flexDirection: 'row',
